@@ -1,0 +1,9 @@
+폴더를 만들고 위의 3개 파일(setup_db.py, app.py, requirements.txt)을 저장합니다.
+
+.streamlit/secrets.toml 파일을 만들어 API 키를 저장합니다.
+
+터미널에서 pip install -r requirements.txt (최초 1회)
+
+터미널에서 python setup_db.py (최초 1회)
+
+터미널에서 streamlit run app.py (실행할 때마다)
