@@ -35,8 +35,24 @@ except Exception as e:
 
 # --- 3. 핵심 로직 함수 ---
 def analyze_image(image_path):
-    print("⚠️ 개발자 노트: 현재 이미지 분석은 '가짜' 결과('피부 발진')를 반환합니다.")
-    return "피부 발진"
+    """실제 Gemini Vision 모델을 사용하여 이미지를 분석하고 라벨을 반환합니다."""
+    try:
+        print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
+        image_file = genai.upload_file(path=image_path)
+        model = genai.GenerativeModel('models/gemini-pro-vision')
+        prompt = "이 반려동물 사진에서 가장 두드러지는 의학적 증상이나 상태를 두세 단어의 핵심 키워드로 요약해줘. (예: 피부 발진, 눈 충혈, 정상적인 털)"
+        response = model.generate_content([prompt, image_file])
+        
+        # 응답 후 파일 상태 확인 및 삭제
+        while image_file.state.name == "PROCESSING":
+            print('... Still processing file')
+            image_file.get_file()
+        genai.delete_file(image_file.name)
+        print(f"INFO: Image analysis result: {response.text.strip()}")
+        return response.text.strip()
+    except Exception as e:
+        print(f"이미지 분석 중 오류 발생: {e}")
+        return "이미지 분석 실패"
 
 def search_db_by_image_label(image_label):
     database_url = os.environ.get("DATABASE_URL")

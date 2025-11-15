@@ -37,7 +37,13 @@
                             {% endif %}
                             {% if result.obesity_analysis %}
                             <li class="list-group-item">
-                                <strong>비만도 분석:</strong> {{ result.obesity_analysis }}
+                                <strong>비만도 분석:</strong>
+                                {% if result.obesity_analysis.status == '평가 가이드' %}
+                                    <div class="mt-2 p-2 bg-light border rounded" style="white-space: pre-wrap;">{{ result.obesity_analysis.message }}</div>
+                                {% elif result.obesity_analysis.assessable %}
+                                    <span class="badge bg-secondary">{{ result.obesity_analysis.status }}</span>
+                                    {{ result.obesity_analysis.message }}
+                                {% endif %}
                             </li>
                             {% endif %}
                         </ul>
