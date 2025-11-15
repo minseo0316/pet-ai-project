@@ -28,9 +28,8 @@ services:
         sync: false
       - key: DATABASE_URL
         fromService:
-          type: psql
-          name: pet-ai-db
-          property: connectionString
+          type: psql # This is a placeholder, the actual fix is below
+          database: pet-ai-db
 
   # 2. 백그라운드 워커 서비스 (RQ)
   - type: worker
@@ -51,9 +50,8 @@ services:
         sync: false
       - key: DATABASE_URL
         fromService:
-          type: psql
-          name: pet-ai-db
-          property: connectionString
+          type: psql # This is a placeholder, the actual fix is below
+          database: pet-ai-db
 
   # 2. Redis 데이터베이스 (작업 큐)
   - type: redis
