@@ -1,0 +1,48 @@
+# render.yaml
+# Render Blueprint를 위한 설정 파일
+
+services:
+  # 1. 웹 서버 서비스 (Flask/Gunicorn)
+  - type: web
+    name: pet-ai-web
+    env: python
+    plan: free # 무료 플랜 사용
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.4 # 사용하시는 파이썬 버전에 맞게 조절
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: pet-ai-redis
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false # Render 대시보드에서 직접 입력
+      - key: DATABASE_URL
+        sync: false # Render 대시보드에서 직접 입력
+
+  # 2. 백그라운드 워커 서비스 (RQ)
+  - type: worker
+    name: pet-ai-worker
+    env: python
+    plan: free # 무료 플랜 사용
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "rq worker"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.4
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: pet-ai-redis
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+
+  # 3. Redis 데이터베이스 (작업 큐)
+  - type: redis
+    name: pet-ai-redis
+    plan: free # 무료 플랜 사용
