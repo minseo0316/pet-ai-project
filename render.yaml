@@ -27,7 +27,6 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: DATABASE_URL
-        fromService:
         fromDatabase:
           name: pet-ai-db
           property: connectionString
@@ -50,7 +49,6 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: DATABASE_URL
-        fromService:
         fromDatabase:
           name: pet-ai-db
           property: connectionString
