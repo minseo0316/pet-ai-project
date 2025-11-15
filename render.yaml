@@ -1,21 +1,14 @@
 # render.yaml
 # Render Blueprint를 위한 설정 파일
 
-databases:
-  # 1. PostgreSQL 데이터베이스
-  - name: pet-ai-db
-    plan: free # 무료 플랜 사용
-    # 데이터베이스 버전이 중요할 경우 아래 주석을 해제하고 버전을 명시하세요.
-    # postgresqlVersion: 15
-
 services:
-  # 1. 웹 서버 서비스 (Flask/Gunicorn)
+  # 웹 서버 서비스 (Flask/Waitress)
   - type: web
     name: pet-ai-web
     env: python
     plan: free # 무료 플랜 사용
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "honcho start"
+    startCommand: "python -m waitress --port=$PORT app:app"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.4 # 사용하시는 파이썬 버전에 맞게 조절

@@ -1,2 +1,1 @@
-web: gunicorn app:app
-worker: rq worker
+web: python -m waitress --port=$PORT app:app

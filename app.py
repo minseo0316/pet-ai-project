@@ -1,41 +1,13 @@
 # app.py
 import os
 import sqlite3
-from flask import Flask, request, render_template, url_for, redirect, jsonify
-import psycopg2
-import psycopg2.extras
+from flask import Flask, request, render_template, url_for, jsonify
 import google.generativeai as genai
 import markdown
-from flask_rq2 import RQ
 from PIL import Image
 from werkzeug.utils import secure_filename
 
 from petai_utils import analyze_behaviors, assess_cat_obesity, assess_dog_obesity, BEHAVIOR_DB
-
-# --- DB 초기화 함수 (setup_db.py에서 가져옴) ---
-def run_postgres_setup(database_url):
-    """PostgreSQL 데이터베이스를 확인하고 테이블 및 데이터를 초기화합니다."""
-    try:
-        conn = psycopg2.connect(database_url)
-        cur = conn.cursor()
-        # 테이블이 없는 경우에만 생성
-        cur.execute('''
-        CREATE TABLE IF NOT EXISTS diseases (
-            id SERIAL PRIMARY KEY,
-            disease_name TEXT NOT NULL,
-            image_labels TEXT,
-            text_symptoms TEXT,
-            warning_level TEXT,
-            advice TEXT
-        )
-        ''')
-        conn.commit()
-        print("Postgres: 테이블 생성 완료 (또는 이미 존재함).")
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print(f"Postgres 설정 중 오류 발생: {e}")
-
 
 # --- 1. Flask 앱 설정 ---
 app = Flask(__name__)
@@ -44,17 +16,17 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# --- RQ (작업 큐) 설정 ---
-app.config['RQ_REDIS_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
-rq = RQ(app)
+DB_FILE = 'pet_health.db'
 
 
 # --- 2. Gemini API 설정 ---
 try:
     api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY 환경 변수가 설정되지 않았습니다.")
-    genai.configure(api_key=api_key)
+    if api_key:
+        genai.configure(api_key=api_key)
+        print("INFO: GEMINI_API_KEY 설정 완료")
+    else:
+        print("경고: GEMINI_API_KEY 환경 변수가 설정되지 않았습니다.")
 except Exception as e:
     print(f"API 키 설정 오류: {e}")
 
@@ -68,43 +40,41 @@ diseases_data = [
 
 def run_db_setup():
     """
-    데이터베이스를 확인하고 필요한 테이블과 초기 데이터를 설정합니다.
-    Render 환경에서는 PostgreSQL을, 로컬에서는 SQLite를 사용합니다.
+    SQLite 데이터베이스를 초기화합니다.
     """
-    database_url = os.environ.get("DATABASE_URL")
-    if database_url:
-        # --- PostgreSQL 설정 ---
-        try:
-            conn = psycopg2.connect(database_url)
-            cur = conn.cursor()
-            cur.execute('''
-                CREATE TABLE IF NOT EXISTS diseases (
-                    id SERIAL PRIMARY KEY,
-                    disease_name TEXT NOT NULL,
-                    image_labels TEXT,
-                    text_symptoms TEXT,
-                    warning_level TEXT,
-                    advice TEXT
-                )
-            ''')
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cur = conn.cursor()
+        
+        # 테이블 생성
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS diseases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                disease_name TEXT NOT NULL,
+                image_labels TEXT,
+                text_symptoms TEXT,
+                warning_level TEXT,
+                advice TEXT
+            )
+        ''')
+        conn.commit()
+        
+        # 데이터 확인 및 삽입
+        cur.execute("SELECT COUNT(*) FROM diseases")
+        count = cur.fetchone()[0]
+        
+        if count == 0:
+            print("SQLite: 테이블이 비어있어 초기 데이터를 삽입합니다.")
+            insert_q = '''INSERT INTO diseases (disease_name, image_labels, text_symptoms, warning_level, advice) VALUES (?,?,?,?,?)'''
+            cur.executemany(insert_q, diseases_data)
             conn.commit()
-            print("Postgres: 테이블 생성 확인 완료.")
-
-            # 테이블이 비어있는 경우에만 초기 데이터 삽입
-            cur.execute("SELECT COUNT(*) FROM diseases")
-            if cur.fetchone()[0] == 0:
-                print("Postgres: 테이블이 비어있어 초기 데이터를 삽입합니다.")
-                insert_q = '''INSERT INTO diseases (disease_name, image_labels, text_symptoms, warning_level, advice) VALUES (%s,%s,%s,%s,%s)'''
-                cur.executemany(insert_q, diseases_data)
-                conn.commit()
-                print(f"Postgres: {len(diseases_data)}개의 초기 질병 데이터가 DB에 저장되었습니다.")
-            else:
-                print("Postgres: 데이터가 이미 존재하므로 초기화를 건너뜁니다.")
-
-            cur.close()
-            conn.close()
-        except Exception as e:
-            print(f"Postgres DB 설정 중 오류 발생: {e}")
+            print(f"SQLite: {len(diseases_data)}개의 초기 질병 데이터가 DB에 저장되었습니다.")
+        else:
+            print(f"SQLite: DB에 이미 {count}개의 데이터가 있습니다.")
+        
+        conn.close()
+    except Exception as e:
+        print(f"SQLite DB 설정 중 오류 발생: {e}")
 
 
 # --- 3. 핵심 로직 함수 ---
@@ -113,7 +83,7 @@ def analyze_image(image_path):
     try:
         print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
         image_file = genai.upload_file(path=image_path)
-        model = genai.GenerativeModel('models/gemini-pro-vision')
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
         prompt = """
         당신은 수의학 지식이 있는 AI 보조원입니다.
         이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
@@ -135,32 +105,7 @@ def analyze_image(image_path):
         return "이미지 분석 실패"
 
 def search_db_by_image_label(image_label):
-    database_url = os.environ.get("DATABASE_URL")
-    if database_url:
-        # PostgreSQL: 모든 질병 정보를 가져와서 Python에서 키워드 매칭
-        try:
-            conn = psycopg2.connect(database_url)
-            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            cur.execute("SELECT * FROM diseases")
-            all_diseases = cur.fetchall()
-            cur.close()
-            conn.close()
-
-            matched_diseases = []
-            for disease in all_diseases:
-                keywords = [k.strip() for k in disease['image_labels'].split(',')]
-                if any(keyword in image_label for keyword in keywords if keyword):
-                    matched_diseases.append(dict(disease))
-            return matched_diseases
-        except Exception as e:
-            print(f"Postgres(DB) 검색 중 오류 발생: {e}")
-            return None
-
-    # SQLite: 모든 질병 정보를 가져와서 Python에서 키워드 매칭
-    DB_FILE = 'pet_health.db'
-    if not os.path.exists(DB_FILE):
-        print(f"데이터베이스 파일({DB_FILE})을 찾을 수 없습니다.")
-        return None
+    """이미지 라벨을 기반으로 데이터베이스에서 관련 질병을 검색합니다."""
     try:
         conn = sqlite3.connect(DB_FILE)
         conn.row_factory = sqlite3.Row
@@ -168,12 +113,15 @@ def search_db_by_image_label(image_label):
         cur.execute("SELECT * FROM diseases")
         all_diseases = cur.fetchall()
         conn.close()
+        
         matched_diseases = []
         for disease in all_diseases:
-            keywords = [k.strip() for k in dict(disease)['image_labels'].split(',')]
+            disease_dict = dict(disease)
+            keywords = [k.strip() for k in disease_dict['image_labels'].split(',')]
             if any(keyword in image_label for keyword in keywords if keyword):
-                matched_diseases.append(dict(disease))
-        return matched_diseases
+                matched_diseases.append(disease_dict)
+        
+        return matched_diseases if matched_diseases else None
     except Exception as e:
         print(f"DB 검색 중 오류 발생: {e}")
         return None
@@ -218,7 +166,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             mission = "[보호자 관찰 내용]을 바탕으로,"
 
         # --- Gemini 모델 초기화 ---
-        model = genai.GenerativeModel('models/gemini-pro-latest')
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
 
         if 'image_analysis_label' in result_data:
             prompt_contexts.append(f"[사진 분석 결과 라벨]\n{result_data['image_analysis_label']}")
@@ -275,15 +223,13 @@ def analyze():
     uploaded_file = request.files.get('image')
 
     if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
-        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys()))
+        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys())), 400
 
     image_path_relative = None
     if uploaded_file and uploaded_file.filename != '':
-        # Pillow를 사용하여 이미지를 열고 PNG로 변환하여 안정성을 높입니다.
         try:
             image = Image.open(uploaded_file.stream)
             original_filename = secure_filename(uploaded_file.filename)
-            # 파일 확장자를 .png로 통일합니다.
             filename_stem = os.path.splitext(original_filename)[0]
             new_filename = f"{filename_stem}.png"
             image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
@@ -291,14 +237,17 @@ def analyze():
             image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
         except Exception as e:
             print(f"이미지 처리 중 오류 발생: {e}")
-            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}", behaviors=list(BEHAVIOR_DB.keys()))
+            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 400
 
-    # request.form은 워커에서 직접 접근할 수 없으므로 딕셔너리로 변환하여 전달합니다.
     selected_behaviors = request.form.getlist('behaviors')
-    job = rq.get_queue().enqueue(run_analysis_task, args=(dict(request.form), image_path_relative, selected_behaviors))
-
-    # 사용자를 결과 로딩 페이지로 리디렉션합니다.
-    return redirect(url_for('loading', job_id=job.id))
+    
+    # 동기식으로 분석 수행
+    try:
+        result_data = run_analysis_task(dict(request.form), image_path_relative, selected_behaviors)
+        return render_template('results.html', result=result_data)
+    except Exception as e:
+        print(f"분석 처리 중 오류: {e}")
+        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 500
 
 @app.route('/loading/<job_id>')
 def loading(job_id):
@@ -307,26 +256,13 @@ def loading(job_id):
 
 @app.route('/results/<job_id>')
 def get_results(job_id):
-    job = rq.get_queue().fetch_job(job_id)
-    if job:
-        if job.is_finished:
-            # 작업이 성공적으로 완료됨
-            return jsonify({'status': 'finished', 'result': job.result})
-        elif job.is_failed:
-            # 작업 실패
-            return jsonify({'status': 'failed'})
-    # 작업이 아직 진행 중이거나 존재하지 않음
-    return jsonify({'status': 'pending'})
+    # 동기식 처리로 변경됨 - 더 이상 사용되지 않음
+    return jsonify({'status': 'finished'})
 
 @app.route('/show_result/<job_id>')
 def show_result(job_id):
-    job = rq.get_queue().fetch_job(job_id)
-    if job and job.is_finished:
-        # 작업이 완료되었으면, 결과를 results.html 템플릿에 전달하여 렌더링
-        return render_template('results.html', result=job.result)
-    else:
-        # 작업이 없거나 아직 끝나지 않았으면 로딩 페이지로 다시 보냄
-        return redirect(url_for('loading', job_id=job_id))
+    # 동기식 처리로 변경됨 - 더 이상 사용되지 않음
+    return jsonify({'status': 'finished'})
 
 _db_initialized = False
 @app.before_request
@@ -336,6 +272,11 @@ def initialize_database():
     if not _db_initialized:
         run_db_setup()
         _db_initialized = True
+
+@app.errorhandler(500)
+def internal_error(error):
+    print(f"500 Error: {error}")
+    return render_template('index.html', error="서버 오류가 발생했습니다. 다시 시도해주세요.", behaviors=list(BEHAVIOR_DB.keys())), 500
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
