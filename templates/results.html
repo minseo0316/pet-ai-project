@@ -19,14 +19,16 @@
                             <h4>오류 발생</h4>
                             <p>{{ result.error }}</p>
                         </div>
-                    {% elif result.image_path %}
-                        <!-- 사용자가 업로드한 이미지 표시 -->
-                        <div class="text-center mb-4">
-                            <p class="text-muted">분석에 사용된 이미지</p>
-                            <img src="{{ url_for('static', filename=result.image_path) }}" class="img-fluid rounded" alt="사용자가 업로드한 이미지" style="max-height: 400px;">
-                        </div>
-                        <hr>
                     {% else %}
+                        <!-- 사용자가 업로드한 이미지 표시 -->
+                        {% if result.image_path %}
+                            <div class="text-center mb-4">
+                                <p class="text-muted">분석에 사용된 이미지</p>
+                                <img src="{{ url_for('static', filename=result.image_path) }}" class="img-fluid rounded" alt="사용자가 업로드한 이미지" style="max-height: 400px;">
+                            </div>
+                            <hr>
+                        {% endif %}
+
                         <!-- Gemini AI 분석 결과 -->
                         <div class="mb-4">
                             {{ result.gemini_response | safe }}
