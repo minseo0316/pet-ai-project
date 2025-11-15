@@ -1,12 +1,10 @@
 # render.yaml
-# Render Blueprint를 위한 설정 파일
 
 services:
-  # 웹 서버 서비스 (Flask/Waitress)
   - type: web
     name: pet-ai-web
     env: python
-    plan: free # 무료 플랜 사용
+    plan: free
     buildCommand: "pip install -r requirements.txt"
     startCommand: "python -m waitress --port=$PORT app:app"
     envVars:
