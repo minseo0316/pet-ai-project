@@ -264,27 +264,21 @@ def analyze():
     if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
         return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys())), 400
 
+    image_path_relative = None
     if uploaded_file and uploaded_file.filename != '':
         try:
             image = Image.open(uploaded_file.stream)
             original_filename = secure_filename(uploaded_file.filename)
             filename_stem = os.path.splitext(original_filename)[0]
+            new_filename = f"{filename_stem}.png"
+            image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+            image.save(image_path_full, 'PNG')
+            image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
         except Exception as e:
             print(f"이미지 처리 중 오류 발생: {e}")
             return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 400
 
     selected_behaviors = request.form.getlist('behaviors')
-    
-    # 동기식으로 분석 수행
-    image_path_relative = None
-    if uploaded_file and uploaded_file.filename != '':
-        image = Image.open(uploaded_file.stream)
-        original_filename = secure_filename(uploaded_file.filename)
-        filename_stem = os.path.splitext(original_filename)[0]
-        new_filename = f"{filename_stem}.png"
-        image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
-        image.save(image_path_full, 'PNG')
-        image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
 
     job = rq.get_queue().enqueue(run_analysis_task, args=(dict(request.form), image_path_relative, selected_behaviors))
 
