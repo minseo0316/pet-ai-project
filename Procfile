@@ -1,1 +1,0 @@
-web: waitress --port=$PORT app:app
