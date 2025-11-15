@@ -58,6 +58,37 @@ try:
 except Exception as e:
     print(f"API 키 설정 오류: {e}")
 
+def run_db_setup():
+    """
+    데이터베이스를 확인하고 필요한 테이블과 초기 데이터를 설정합니다.
+    Render 환경에서는 PostgreSQL을, 로컬에서는 SQLite를 사용합니다.
+    """
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        # --- PostgreSQL 설정 ---
+        try:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS diseases (
+                    id SERIAL PRIMARY KEY,
+                    disease_name TEXT NOT NULL,
+                    image_labels TEXT,
+                    text_symptoms TEXT,
+                    warning_level TEXT,
+                    advice TEXT
+                )
+            ''')
+            # 참고: 실제 운영 환경에서는 데이터 초기화 로직을 더 정교하게 만들어야 합니다.
+            # 예를 들어, 테이블이 비어있을 때만 데이터를 삽입하는 방식 등.
+            conn.commit()
+            print("Postgres: 테이블 생성 확인 완료.")
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"Postgres DB 설정 중 오류 발생: {e}")
+
+
 # --- 3. 핵심 로직 함수 ---
 def analyze_image(image_path):
     """실제 Gemini Vision 모델을 사용하여 이미지를 분석하고 라벨을 반환합니다."""
@@ -268,11 +299,8 @@ def show_result(job_id):
         # 작업이 없거나 아직 끝나지 않았으면 로딩 페이지로 다시 보냄
         return redirect(url_for('loading', job_id=job_id))
 
-# --- 앱 컨텍스트에서 DB 초기화 ---
-with app.app_context():
-    db_url = os.environ.get('DATABASE_URL')
-    if db_url:
-        run_postgres_setup(db_url)
+# --- 앱 시작 시 DB 설정 실행 ---
+run_db_setup()
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
