@@ -40,7 +40,13 @@ def analyze_image(image_path):
         print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
         image_file = genai.upload_file(path=image_path)
         model = genai.GenerativeModel('models/gemini-pro-vision')
-        prompt = "이 반려동물 사진에서 가장 두드러지는 의학적 증상이나 상태를 두세 단어의 핵심 키워드로 요약해줘. (예: 피부 발진, 눈 충혈, 정상적인 털)"
+        prompt = """
+        당신은 수의학 지식이 있는 AI 보조원입니다.
+        이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
+        눈, 코, 입, 귀, 피부, 털 상태, 자세 등 구체적인 부위에 집중해서 설명해주세요.
+        만약 여러 증상이 보인다면 모두 나열해주세요. (예: 왼쪽 눈의 탁한 분비물, 코 주변의 약간의 붉은 기, 가슴 부분의 뭉친 털)
+        만약 특별한 이상 징후 없이 건강해 보인다면 '외관상 특이 소견 없음' 이라고 답변해주세요.
+        """
         response = model.generate_content([prompt, image_file])
         
         # 응답 후 파일 상태 확인 및 삭제
