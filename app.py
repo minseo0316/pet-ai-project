@@ -200,7 +200,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             mission = "[보호자 관찰 내용]을 바탕으로,"
 
         # --- Gemini 모델 초기화 ---
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro')
 
         if 'image_analysis_label' in result_data:
             prompt_contexts.append(f"[사진 분석 결과 라벨]\n{result_data['image_analysis_label']}")
