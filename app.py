@@ -282,5 +282,7 @@ def internal_error(error):
 if __name__ == '__main__':
     # 개발/테스트 시에는 waitress를 사용하여 Windows에서도 안정적으로 실행
     from waitress import serve
-    print("INFO: Starting web server on http://localhost:5001")
-    serve(app, host='0.0.0.0', port=5001)
+    port = int(os.environ.get('PORT', 5001))
+    print(f"INFO: Starting web server on http://0.0.0.0:{port}")
+    serve(app, host='0.0.0.0', port=port)
+
