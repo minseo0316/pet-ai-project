@@ -32,7 +32,13 @@
                         <ul class="list-group list-group-flush">
                             {% if result.behavior_analysis %}
                             <li class="list-group-item">
-                                <strong>이상 행동 분석:</strong> {{ result.behavior_analysis }}
+                                <strong>이상 행동 분석:</strong>
+                                {% for analysis in result.behavior_analysis %}
+                                <div class="mt-2 p-2 bg-light border rounded">
+                                    <p class="mb-1"><strong>{{ analysis.behavior }}:</strong> {{ analysis.coaching }}</p>
+                                    <small class="text-muted">의심 원인: {{ analysis.possible_causes | join(', ') }}</small>
+                                </div>
+                                {% endfor %}
                             </li>
                             {% endif %}
                             {% if result.obesity_analysis %}
