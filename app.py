@@ -2,6 +2,7 @@
 import os
 import sqlite3
 from flask import Flask, request, render_template, url_for, jsonify
+import psycopg2
 import google.generativeai as genai
 import markdown
 from PIL import Image
@@ -40,41 +41,63 @@ diseases_data = [
 
 def run_db_setup():
     """
-    SQLite 데이터베이스를 초기화합니다.
+    데이터베이스를 확인하고 필요한 테이블과 초기 데이터를 설정합니다.
+    Render 환경에서는 PostgreSQL을, 로컬에서는 SQLite를 사용합니다.
     """
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cur = conn.cursor()
-        
-        # 테이블 생성
-        cur.execute('''
-            CREATE TABLE IF NOT EXISTS diseases (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                disease_name TEXT NOT NULL,
-                image_labels TEXT,
-                text_symptoms TEXT,
-                warning_level TEXT,
-                advice TEXT
-            )
-        ''')
-        conn.commit()
-        
-        # 데이터 확인 및 삽입
-        cur.execute("SELECT COUNT(*) FROM diseases")
-        count = cur.fetchone()[0]
-        
-        if count == 0:
-            print("SQLite: 테이블이 비어있어 초기 데이터를 삽입합니다.")
-            insert_q = '''INSERT INTO diseases (disease_name, image_labels, text_symptoms, warning_level, advice) VALUES (?,?,?,?,?)'''
-            cur.executemany(insert_q, diseases_data)
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url:
+        # --- PostgreSQL 설정 (Render 환경) ---
+        try:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS diseases (
+                    id SERIAL PRIMARY KEY,
+                    disease_name TEXT NOT NULL,
+                    image_labels TEXT,
+                    text_symptoms TEXT,
+                    warning_level TEXT,
+                    advice TEXT
+                )
+            ''')
             conn.commit()
-            print(f"SQLite: {len(diseases_data)}개의 초기 질병 데이터가 DB에 저장되었습니다.")
-        else:
-            print(f"SQLite: DB에 이미 {count}개의 데이터가 있습니다.")
-        
-        conn.close()
-    except Exception as e:
-        print(f"SQLite DB 설정 중 오류 발생: {e}")
+            print("Postgres: 테이블 생성 확인 완료.")
+
+            cur.execute("SELECT COUNT(*) FROM diseases")
+            if cur.fetchone()[0] == 0:
+                print("Postgres: 테이블이 비어있어 초기 데이터를 삽입합니다.")
+                insert_q = '''INSERT INTO diseases (disease_name, image_labels, text_symptoms, warning_level, advice) VALUES (%s,%s,%s,%s,%s)'''
+                cur.executemany(insert_q, diseases_data)
+                conn.commit()
+                print(f"Postgres: {len(diseases_data)}개의 초기 질병 데이터가 DB에 저장되었습니다.")
+            else:
+                print("Postgres: 데이터가 이미 존재하므로 초기화를 건너뜁니다.")
+
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"Postgres DB 설정 중 오류 발생: {e}")
+    else:
+        # --- SQLite 설정 (로컬 환경) ---
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS diseases (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    disease_name TEXT NOT NULL, image_labels TEXT, text_symptoms TEXT,
+                    warning_level TEXT, advice TEXT
+                )
+            ''')
+            conn.commit()
+            cur.execute("SELECT COUNT(*) FROM diseases")
+            if cur.fetchone()[0] == 0:
+                insert_q = '''INSERT INTO diseases (disease_name, image_labels, text_symptoms, warning_level, advice) VALUES (?,?,?,?,?)'''
+                cur.executemany(insert_q, diseases_data)
+                conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"SQLite DB 설정 중 오류 발생: {e}")
 
 
 # --- 3. 핵심 로직 함수 ---
@@ -106,25 +129,36 @@ def analyze_image(image_path):
 
 def search_db_by_image_label(image_label):
     """이미지 라벨을 기반으로 데이터베이스에서 관련 질병을 검색합니다."""
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
     try:
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+
         cur.execute("SELECT * FROM diseases")
         all_diseases = cur.fetchall()
-        conn.close()
-        
+
         matched_diseases = []
-        for disease in all_diseases:
-            disease_dict = dict(disease)
+        for disease_row in all_diseases:
+            disease_dict = dict(disease_row)
             keywords = [k.strip() for k in disease_dict['image_labels'].split(',')]
             if any(keyword in image_label for keyword in keywords if keyword):
                 matched_diseases.append(disease_dict)
-        
+
         return matched_diseases if matched_diseases else None
+
     except Exception as e:
         print(f"DB 검색 중 오류 발생: {e}")
         return None
+    finally:
+        if conn:
+            conn.close()
+
 
 def run_analysis_task(form_data, image_path_relative, selected_behaviors):
     """오래 걸리는 분석 작업을 수행하는 함수 (백그라운드 워커에서 실행됨)"""
