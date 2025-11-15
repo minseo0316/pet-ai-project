@@ -2,13 +2,14 @@
 import os
 import sqlite3
 from flask import Flask, request, render_template, url_for, jsonify
-import psycopg2
+import psycopg2, psycopg2.extras
 import google.generativeai as genai
 import markdown
 from PIL import Image
 from werkzeug.utils import secure_filename
 
 from petai_utils import analyze_behaviors, assess_cat_obesity, assess_dog_obesity, BEHAVIOR_DB
+
 
 # --- 1. Flask 앱 설정 ---
 app = Flask(__name__)
@@ -19,6 +20,10 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 DB_FILE = 'pet_health.db'
 
+# --- RQ (작업 큐) 설정 ---
+from flask_rq2 import RQ
+app.config['RQ_REDIS_URL'] = os.environ.get('RQ_REDIS_URL', 'redis://localhost:6379/0')
+rq = RQ(app)
 
 # --- 2. Gemini API 설정 ---
 try:
@@ -259,16 +264,11 @@ def analyze():
     if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
         return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys())), 400
 
-    image_path_relative = None
     if uploaded_file and uploaded_file.filename != '':
         try:
             image = Image.open(uploaded_file.stream)
             original_filename = secure_filename(uploaded_file.filename)
             filename_stem = os.path.splitext(original_filename)[0]
-            new_filename = f"{filename_stem}.png"
-            image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
-            image.save(image_path_full, 'PNG')
-            image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
         except Exception as e:
             print(f"이미지 처리 중 오류 발생: {e}")
             return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 400
@@ -276,12 +276,19 @@ def analyze():
     selected_behaviors = request.form.getlist('behaviors')
     
     # 동기식으로 분석 수행
-    try:
-        result_data = run_analysis_task(dict(request.form), image_path_relative, selected_behaviors)
-        return render_template('results.html', result=result_data)
-    except Exception as e:
-        print(f"분석 처리 중 오류: {e}")
-        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 500
+    image_path_relative = None
+    if uploaded_file and uploaded_file.filename != '':
+        image = Image.open(uploaded_file.stream)
+        original_filename = secure_filename(uploaded_file.filename)
+        filename_stem = os.path.splitext(original_filename)[0]
+        new_filename = f"{filename_stem}.png"
+        image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+        image.save(image_path_full, 'PNG')
+        image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
+
+    job = rq.get_queue().enqueue(run_analysis_task, args=(dict(request.form), image_path_relative, selected_behaviors))
+
+    return redirect(url_for('loading', job_id=job.id))
 
 @app.route('/loading/<job_id>')
 def loading(job_id):
@@ -290,13 +297,20 @@ def loading(job_id):
 
 @app.route('/results/<job_id>')
 def get_results(job_id):
-    # 동기식 처리로 변경됨 - 더 이상 사용되지 않음
-    return jsonify({'status': 'finished'})
+    job = rq.get_queue().fetch_job(job_id)
+    if job:
+        if job.is_finished:
+            return jsonify({'status': 'finished', 'result': job.result})
+        elif job.is_failed:
+            return jsonify({'status': 'failed'})
+    return jsonify({'status': 'pending'})
 
 @app.route('/show_result/<job_id>')
 def show_result(job_id):
-    # 동기식 처리로 변경됨 - 더 이상 사용되지 않음
-    return jsonify({'status': 'finished'})
+    job = rq.get_queue().fetch_job(job_id)
+    if job and job.is_finished:
+        return render_template('results.html', result=job.result)
+    return redirect(url_for('loading', job_id=job_id))
 
 _db_initialized = False
 @app.before_request
