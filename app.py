@@ -1,11 +1,12 @@
 # app.py
 import os
 import sqlite3
+from flask import Flask, request, render_template, url_for, redirect, jsonify
 import psycopg2
 import psycopg2.extras
 import google.generativeai as genai
-import markdown  # 마크다운 변환을 위해 추가
-from flask import Flask, request, render_template, url_for, redirect
+import markdown
+from flask_rq2 import RQ
 from PIL import Image
 from werkzeug.utils import secure_filename
 
@@ -17,6 +18,11 @@ UPLOAD_FOLDER = 'static/uploads'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# --- RQ (작업 큐) 설정 ---
+app.config['RQ_REDIS_URL'] = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
+rq = RQ(app)
+
 
 # --- 2. Gemini API 설정 ---
 try:
@@ -65,63 +71,49 @@ def search_db_by_image_label(image_label):
         print(f"DB 검색 중 오류 발생: {e}")
         return None
 
-# --- 4. Flask 라우트(경로) 설정 ---
-@app.route('/')
-def index():
-    behavior_options = list(BEHAVIOR_DB.keys())
-    return render_template('index.html', behaviors=behavior_options)
-
-@app.route('/analyze', methods=['POST'])
-def analyze():
-    pet_type = request.form.get('pet_type', '고양이')
-    symptom_text = request.form.get('symptoms', '').strip()
-    uploaded_file = request.files.get('image')
-    selected_behaviors = request.form.getlist('behaviors')
-    age_years = float(request.form.get('age', 2.0))
-    weight_kg = float(request.form.get('weight', 4.5))
-
-    if not symptom_text and not uploaded_file:
-        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys()))
+def run_analysis_task(form_data, image_path_relative):
+    """오래 걸리는 분석 작업을 수행하는 함수 (백그라운드 워커에서 실행됨)"""
+    # form_data에서 필요한 값들을 다시 추출
+    pet_type = form_data.get('pet_type', '고양이')
+    symptom_text = form_data.get('symptoms', '').strip()
+    selected_behaviors = form_data.getlist('behaviors') if hasattr(form_data, 'getlist') else form_data.get('behaviors', []) # dict는 getlist가 없으므로 분기 처리
+    age_years = float(form_data.get('age', 2.0))
+    weight_kg = float(form_data.get('weight', 4.5))
 
     result_data = {}
     prompt_contexts = []
 
     try:
         # --- 이미지 처리 (이미지가 있는 경우) ---
-        if uploaded_file and uploaded_file.filename != '':
-            filename = secure_filename(uploaded_file.filename)
-            image_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            uploaded_file.save(image_path)
-            result_data['image_path'] = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), filename).replace('\\', '/')
+        if image_path_relative:
+            result_data['image_path'] = image_path_relative
+            image_path = os.path.join('static', image_path_relative) # 실제 파일 경로
 
             image_result_label = analyze_image(image_path)
             db_results = search_db_by_image_label(image_result_label)
 
-            prompt_contexts.append(f"[사진 분석 결과 라벨]\n{image_result_label}")
+            result_data['image_analysis_label'] = image_result_label
             if db_results:
                 prompt_contexts.append(f"[사진 분석과 관련된 수의학 지식 (DB 검색 결과)]\n{db_results}")
             else:
-                 prompt_contexts.append("[사진 분석과 관련된 수의학 지식 (DB 검색 결과)]\n일치하는 정보를 찾지 못했습니다.")
+                prompt_contexts.append("[사진 분석과 관련된 수의학 지식 (DB 검색 결과)]\n일치하는 정보를 찾지 못했습니다.")
 
         # --- 증상 텍스트 처리 (증상이 있는 경우) ---
         if symptom_text:
+            result_data['symptom_text'] = symptom_text
             prompt_contexts.append(f"[보호자 관찰 내용]\n{symptom_text}")
 
-        # --- Gemini 프롬프트 구성 및 호출 ---
-        model = genai.GenerativeModel('models/gemini-pro-latest')
-        
-        mission = ""
-        if symptom_text and uploaded_file:
-            mission = "위의 [사진 분석과 관련된 수의학 지식]을 바탕으로, [보호자 관찰 내용]과 [사진 분석 결과 라벨]을 종합하여"
-        elif uploaded_file:
+        mission = "" # mission 변수 초기화
+        if symptom_text and image_path_relative:
+            mission = "위의 [사진 분석과 관련된 수의학 지식]을 바탕으로, [보호자 관찰 내용]과 [사진 분석 결과 라벨]을 종합하여" 
+        elif image_path_relative:
             mission = "위의 [사진 분석과 관련된 수의학 지식]과 [사진 분석 결과 라벨]을 바탕으로,"
         else: # symptom_text only
             mission = "[보호자 관찰 내용]을 바탕으로,"
 
         prompt = f'''
-        당신은 전문 {pet_type} 수의사 AI 조수입니다.
+        당신은 전문 {pet_type} 수의사 AI 조수입니다. {", ".join(prompt_contexts)}
 
-        {chr(10).join(prompt_contexts)}
 
         ---
         [임무]
@@ -130,11 +122,7 @@ def analyze():
         증상만으로 판단이 어려울 경우, 여러 가능성을 제시하고 사진 등의 추가 정보를 요청할 수 있습니다.
         답변은 반드시 아래 [출력 형식]을 따라야 합니다.
 
-        [규칙]
-        1. 절대 '진단'을 내리지 말고, "~일 수 있습니다", "~이 의심됩니다" 또는 "~와 유사한 증상입니다"라고 표현하세요.
-        2. 모든 내용은 한국어로 작성해주세요.
-        3. 마지막에 "본 결과는 AI의 분석이며, 수의사의 진단을 대체할 수 없습니다. 정확한 상태 확인을 위해 반드시 동물병원을 방문하세요."라는 경고 문구를 명확하게 추가하세요.
-
+        [규칙] 
         [출력 형식]
         ### 핵심 요약
         (모든 내용을 한두 문장으로 요약)
@@ -156,12 +144,72 @@ def analyze():
         elif pet_type == '강아지':
             result_data['obesity_analysis'] = assess_dog_obesity(age_years, weight_kg)
 
-        return render_template('index.html', result=result_data, behaviors=list(BEHAVIOR_DB.keys()))
+        return result_data
 
     except Exception as e:
         print(f"분석 중 오류 발생: {e}")
-        return render_template('index.html', error=f"분석 중 오류가 발생했습니다: {e}", behaviors=list(BEHAVIOR_DB.keys()))
+        # 오류 발생 시 오류 정보를 담은 딕셔너리 반환
+        return {"error": f"분석 중 오류가 발생했습니다: {e}"}
+
+# --- 4. Flask 라우트(경로) 설정 ---
+@app.route('/')
+def index():
+    behavior_options = list(BEHAVIOR_DB.keys())
+    return render_template('index.html', behaviors=behavior_options)
+
+@app.route('/analyze', methods=['POST'])
+def analyze():
+    symptom_text = request.form.get('symptoms', '').strip()
+    uploaded_file = request.files.get('image')
+
+    if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
+        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys()))
+
+    image_path_relative = None
+    if uploaded_file and uploaded_file.filename != '':
+        filename = secure_filename(uploaded_file.filename)
+        image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        uploaded_file.save(image_path_full)
+        # 워커가 참조할 수 있도록 static 폴더 기준의 상대 경로 저장
+        image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), filename).replace('\\', '/')
+
+    # request.form은 워커에서 직접 접근할 수 없으므로 딕셔너리로 변환하여 전달합니다.
+    job = rq.get_queue().enqueue(run_analysis_task, args=(dict(request.form), image_path_relative))
+
+    # 사용자를 결과 로딩 페이지로 리디렉션합니다.
+    return redirect(url_for('loading', job_id=job.id))
+
+@app.route('/loading/<job_id>')
+def loading(job_id):
+    # 로딩 페이지를 렌더링합니다. 이 페이지는 JS를 통해 결과를 폴링합니다.
+    return render_template('loading.html', job_id=job_id)
+
+@app.route('/results/<job_id>')
+def get_results(job_id):
+    job = rq.get_queue().fetch_job(job_id)
+    if job:
+        if job.is_finished:
+            # 작업이 성공적으로 완료됨
+            return jsonify({'status': 'finished', 'result': job.result})
+        elif job.is_failed:
+            # 작업 실패
+            return jsonify({'status': 'failed'})
+    # 작업이 아직 진행 중이거나 존재하지 않음
+    return jsonify({'status': 'pending'})
+
+@app.route('/show_result/<job_id>')
+def show_result(job_id):
+    job = rq.get_queue().fetch_job(job_id)
+    if job and job.is_finished:
+        # 작업이 완료되었으면, 결과를 results.html 템플릿에 전달하여 렌더링
+        return render_template('results.html', result=job.result)
+    else:
+        # 작업이 없거나 아직 끝나지 않았으면 로딩 페이지로 다시 보냄
+        return redirect(url_for('loading', job_id=job_id))
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
-    app.run(debug=True, port=5001)
+    # 개발/테스트 시에는 waitress를 사용하여 Windows에서도 안정적으로 실행
+    from waitress import serve
+    print("INFO: Starting web server on http://localhost:5001")
+    serve(app, host='0.0.0.0', port=5001)
