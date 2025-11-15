@@ -46,3 +46,4 @@ services:
   - type: redis
     name: pet-ai-redis
     plan: free # 무료 플랜 사용
+    ipAllowList: [] # 같은 Render 계정 내 서비스들의 접근을 허용
