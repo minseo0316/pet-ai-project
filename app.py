@@ -111,6 +111,9 @@ def run_analysis_task(form_data, image_path_relative):
         else: # symptom_text only
             mission = "[보호자 관찰 내용]을 바탕으로,"
 
+        # --- Gemini 모델 초기화 ---
+        model = genai.GenerativeModel('models/gemini-pro-latest')
+
         prompt = f'''
         당신은 전문 {pet_type} 수의사 AI 조수입니다. {", ".join(prompt_contexts)}
 
