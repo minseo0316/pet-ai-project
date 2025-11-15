@@ -12,6 +12,31 @@ from werkzeug.utils import secure_filename
 
 from petai_utils import analyze_behaviors, assess_cat_obesity, assess_dog_obesity, BEHAVIOR_DB
 
+# --- DB 초기화 함수 (setup_db.py에서 가져옴) ---
+def run_postgres_setup(database_url):
+    """PostgreSQL 데이터베이스를 확인하고 테이블 및 데이터를 초기화합니다."""
+    try:
+        conn = psycopg2.connect(database_url)
+        cur = conn.cursor()
+        # 테이블이 없는 경우에만 생성
+        cur.execute('''
+        CREATE TABLE IF NOT EXISTS diseases (
+            id SERIAL PRIMARY KEY,
+            disease_name TEXT NOT NULL,
+            image_labels TEXT,
+            text_symptoms TEXT,
+            warning_level TEXT,
+            advice TEXT
+        )
+        ''')
+        conn.commit()
+        print("Postgres: 테이블 생성 완료 (또는 이미 존재함).")
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"Postgres 설정 중 오류 발생: {e}")
+
+
 # --- 1. Flask 앱 설정 ---
 app = Flask(__name__)
 UPLOAD_FOLDER = 'static/uploads'
@@ -242,6 +267,12 @@ def show_result(job_id):
     else:
         # 작업이 없거나 아직 끝나지 않았으면 로딩 페이지로 다시 보냄
         return redirect(url_for('loading', job_id=job_id))
+
+# --- 앱 컨텍스트에서 DB 초기화 ---
+with app.app_context():
+    db_url = os.environ.get('DATABASE_URL')
+    if db_url:
+        run_postgres_setup(db_url)
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
