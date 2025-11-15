@@ -328,10 +328,14 @@ def show_result(job_id):
         # 작업이 없거나 아직 끝나지 않았으면 로딩 페이지로 다시 보냄
         return redirect(url_for('loading', job_id=job_id))
 
-@app.before_first_request
-def initialize_app():
-    """앱이 첫 요청을 받기 전에 딱 한 번 실행됩니다."""
-    run_db_setup()
+_db_initialized = False
+@app.before_request
+def initialize_database():
+    """앱이 첫 요청을 받기 전에 딱 한 번 DB를 초기화합니다."""
+    global _db_initialized
+    if not _db_initialized:
+        run_db_setup()
+        _db_initialized = True
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
