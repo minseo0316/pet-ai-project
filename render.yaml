@@ -28,7 +28,7 @@ services:
         sync: false
       - key: DATABASE_URL
         fromService:
-          fromDatabase:
+        fromDatabase:
           name: pet-ai-db
           property: connectionString
 
@@ -51,7 +51,7 @@ services:
         sync: false
       - key: DATABASE_URL
         fromService:
-          fromDatabase:
+        fromDatabase:
           name: pet-ai-db
           property: connectionString
 
