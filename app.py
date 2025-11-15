@@ -87,12 +87,11 @@ def search_db_by_image_label(image_label):
         print(f"DB 검색 중 오류 발생: {e}")
         return None
 
-def run_analysis_task(form_data, image_path_relative):
+def run_analysis_task(form_data, image_path_relative, selected_behaviors):
     """오래 걸리는 분석 작업을 수행하는 함수 (백그라운드 워커에서 실행됨)"""
     # form_data에서 필요한 값들을 다시 추출
     pet_type = form_data.get('pet_type', '고양이')
     symptom_text = form_data.get('symptoms', '').strip()
-    selected_behaviors = form_data.getlist('behaviors') if hasattr(form_data, 'getlist') else form_data.get('behaviors', []) # dict는 getlist가 없으므로 분기 처리
     age_years = float(form_data.get('age', 2.0))
     weight_kg = float(form_data.get('weight', 4.5))
 
@@ -189,14 +188,23 @@ def analyze():
 
     image_path_relative = None
     if uploaded_file and uploaded_file.filename != '':
-        filename = secure_filename(uploaded_file.filename)
-        image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        uploaded_file.save(image_path_full)
-        # 워커가 참조할 수 있도록 static 폴더 기준의 상대 경로 저장
-        image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), filename).replace('\\', '/')
+        # Pillow를 사용하여 이미지를 열고 PNG로 변환하여 안정성을 높입니다.
+        try:
+            image = Image.open(uploaded_file.stream)
+            original_filename = secure_filename(uploaded_file.filename)
+            # 파일 확장자를 .png로 통일합니다.
+            filename_stem = os.path.splitext(original_filename)[0]
+            new_filename = f"{filename_stem}.png"
+            image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+            image.save(image_path_full, 'PNG')
+            image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
+        except Exception as e:
+            print(f"이미지 처리 중 오류 발생: {e}")
+            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}", behaviors=list(BEHAVIOR_DB.keys()))
 
     # request.form은 워커에서 직접 접근할 수 없으므로 딕셔너리로 변환하여 전달합니다.
-    job = rq.get_queue().enqueue(run_analysis_task, args=(dict(request.form), image_path_relative))
+    selected_behaviors = request.form.getlist('behaviors')
+    job = rq.get_queue().enqueue(run_analysis_task, args=(dict(request.form), image_path_relative, selected_behaviors))
 
     # 사용자를 결과 로딩 페이지로 리디렉션합니다.
     return redirect(url_for('loading', job_id=job.id))
