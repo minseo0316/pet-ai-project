@@ -58,6 +58,14 @@ try:
 except Exception as e:
     print(f"API 키 설정 오류: {e}")
 
+# setup_db.py에서 초기 데이터 가져오기
+diseases_data = [
+    ("알레르기성 피부염 (의심)", "피부 발진,붉은 반점,탈모", "가려움,핥음,비빔,발적", "주의 🟡", "사진과 증상으로 볼 때 '알레르기성 피부염'이 의심됩니다. 원인(사료, 간식, 집먼지 등)을 찾아보고, 증상이 지속되면 병원을 방문해 정확한 알레르기 원인을 찾는 것이 좋습니다."),
+    ("백내장 (초기 의심)", "흐릿한 눈,하얀 동공", "눈을 잘 못 마주침,밤에 잘 부딪힘,눈이 뿌옇게 보임", "경고 🔴", "사진상 동공이 뿌옇게 보이는 것은 '백내장'의 초기 징후일 수 있습니다. 방치하면 시력을 잃을 수 있으니 즉시 안과 전문 동물병원을 방문하여 검사를 받으세요."),
+    ("결막염 (의심)", "붉은 눈,눈곱,눈물", "눈을 찡그림,눈 주변을 비빔", "주의 🟡", "눈이 붉어지고 눈곱이 끼는 증상은 '결막염'일 수 있습니다. 세균 감염이나 알레르기 때문일 수 있으니, 병원에서 안약을 처방받아 치료하는 것이 좋습니다."),
+    ("정상 피부", "정상 피부", "특별한 증상 없음", "안전 🟢", "사진과 증상으로는 특별한 이상 징후가 보이지 않습니다. 건강한 상태로 보입니다. 하지만 평소와 다른 행동을 보인다면 주의 깊게 관찰해주세요.")
+]
+
 def run_db_setup():
     """
     데이터베이스를 확인하고 필요한 테이블과 초기 데이터를 설정합니다.
@@ -79,10 +87,20 @@ def run_db_setup():
                     advice TEXT
                 )
             ''')
-            # 참고: 실제 운영 환경에서는 데이터 초기화 로직을 더 정교하게 만들어야 합니다.
-            # 예를 들어, 테이블이 비어있을 때만 데이터를 삽입하는 방식 등.
             conn.commit()
             print("Postgres: 테이블 생성 확인 완료.")
+
+            # 테이블이 비어있는 경우에만 초기 데이터 삽입
+            cur.execute("SELECT COUNT(*) FROM diseases")
+            if cur.fetchone()[0] == 0:
+                print("Postgres: 테이블이 비어있어 초기 데이터를 삽입합니다.")
+                insert_q = '''INSERT INTO diseases (disease_name, image_labels, text_symptoms, warning_level, advice) VALUES (%s,%s,%s,%s,%s)'''
+                cur.executemany(insert_q, diseases_data)
+                conn.commit()
+                print(f"Postgres: {len(diseases_data)}개의 초기 질병 데이터가 DB에 저장되었습니다.")
+            else:
+                print("Postgres: 데이터가 이미 존재하므로 초기화를 건너뜁니다.")
+
             cur.close()
             conn.close()
         except Exception as e:
@@ -119,19 +137,26 @@ def analyze_image(image_path):
 def search_db_by_image_label(image_label):
     database_url = os.environ.get("DATABASE_URL")
     if database_url:
+        # PostgreSQL: 모든 질병 정보를 가져와서 Python에서 키워드 매칭
         try:
             conn = psycopg2.connect(database_url)
             cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            query = "SELECT * FROM diseases WHERE image_labels ILIKE %s"
-            cur.execute(query, (f'%{image_label}%',))
-            rows = cur.fetchall()
+            cur.execute("SELECT * FROM diseases")
+            all_diseases = cur.fetchall()
             cur.close()
             conn.close()
-            return [dict(r) for r in rows]
+
+            matched_diseases = []
+            for disease in all_diseases:
+                keywords = [k.strip() for k in disease['image_labels'].split(',')]
+                if any(keyword in image_label for keyword in keywords if keyword):
+                    matched_diseases.append(dict(disease))
+            return matched_diseases
         except Exception as e:
             print(f"Postgres(DB) 검색 중 오류 발생: {e}")
             return None
 
+    # SQLite: 모든 질병 정보를 가져와서 Python에서 키워드 매칭
     DB_FILE = 'pet_health.db'
     if not os.path.exists(DB_FILE):
         print(f"데이터베이스 파일({DB_FILE})을 찾을 수 없습니다.")
@@ -139,12 +164,16 @@ def search_db_by_image_label(image_label):
     try:
         conn = sqlite3.connect(DB_FILE)
         conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        query = "SELECT * FROM diseases WHERE image_labels LIKE ?"
-        cursor.execute(query, (f'%{image_label}%',))
-        results = cursor.fetchall()
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM diseases")
+        all_diseases = cur.fetchall()
         conn.close()
-        return [dict(row) for row in results]
+        matched_diseases = []
+        for disease in all_diseases:
+            keywords = [k.strip() for k in dict(disease)['image_labels'].split(',')]
+            if any(keyword in image_label for keyword in keywords if keyword):
+                matched_diseases.append(dict(disease))
+        return matched_diseases
     except Exception as e:
         print(f"DB 검색 중 오류 발생: {e}")
         return None
