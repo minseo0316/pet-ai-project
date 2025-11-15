@@ -21,7 +21,7 @@ services:
         sync: false
       - key: DATABASE_URL
         fromService:
-          type: psql
+          type: postgres
           name: pet-ai-db
           property: connectionString
 
@@ -44,7 +44,7 @@ services:
         sync: false
       - key: DATABASE_URL
         fromService:
-          type: psql
+          type: postgres
           name: pet-ai-db
           property: connectionString
 
@@ -55,7 +55,7 @@ services:
     ipAllowList: [] # 같은 Render 계정 내 서비스들의 접근을 허용
 
   # 4. PostgreSQL 데이터베이스
-  - type: psql
+  - type: postgres
     name: pet-ai-db
     plan: free # 무료 플랜 사용
     # 데이터베이스 버전이 중요할 경우 아래 주석을 해제하고 버전을 명시하세요.
