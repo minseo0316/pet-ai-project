@@ -106,7 +106,7 @@ def analyze_image(image_path):
     try:
         print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
         image_file = genai.upload_file(path=image_path)
-        model = genai.GenerativeModel('models/gemini-pro-vision')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
         prompt = """
         당신은 수의학 지식이 있는 AI 보조원입니다.
         이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
@@ -200,7 +200,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             mission = "[보호자 관찰 내용]을 바탕으로,"
 
         # --- Gemini 모델 초기화 ---
-        model = genai.GenerativeModel('models/gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash-latest')
 
         if 'image_analysis_label' in result_data:
             prompt_contexts.append(f"[사진 분석 결과 라벨]\n{result_data['image_analysis_label']}")
