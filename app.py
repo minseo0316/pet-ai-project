@@ -130,6 +130,9 @@ def run_analysis_task(form_data, image_path_relative):
         # --- Gemini 모델 초기화 ---
         model = genai.GenerativeModel('models/gemini-pro-latest')
 
+        if 'image_analysis_label' in result_data:
+            prompt_contexts.append(f"[사진 분석 결과 라벨]\n{result_data['image_analysis_label']}")
+
         prompt = f'''
         당신은 전문 {pet_type} 수의사 AI 조수입니다. {", ".join(prompt_contexts)}
 
