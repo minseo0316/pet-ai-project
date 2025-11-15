@@ -11,27 +11,7 @@ services:
     env: python
     plan: free
     buildCommand: "pip install --no-cache-dir -r requirements.txt"
-    startCommand: "gunicorn app:app"
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.4
-      - key: GEMINI_API_KEY
-        sync: false
-      - key: DATABASE_URL
-        fromDatabase:
-          name: pet-ai-db
-          property: connectionString
-      - key: RQ_REDIS_URL
-        fromService:
-          type: redis
-          name: pet-ai-redis
-          property: connectionString
-  - type: worker
-    name: pet-ai-worker
-    env: python
-    plan: free
-    buildCommand: "pip install --no-cache-dir -r requirements.txt"
-    startCommand: "rq worker"
+    startCommand: "honcho start"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.4
