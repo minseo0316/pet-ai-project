@@ -328,8 +328,8 @@ def show_result(job_id):
         # 작업이 없거나 아직 끝나지 않았으면 로딩 페이지로 다시 보냄
         return redirect(url_for('loading', job_id=job_id))
 
-# --- 앱 시작 시 DB 설정 실행 ---
-run_db_setup()
+with app.app_context():
+    run_db_setup()
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
