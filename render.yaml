@@ -1,6 +1,13 @@
 # render.yaml
 # Render Blueprint를 위한 설정 파일
 
+databases:
+  # 1. PostgreSQL 데이터베이스
+  - name: pet-ai-db
+    plan: free # 무료 플랜 사용
+    # 데이터베이스 버전이 중요할 경우 아래 주석을 해제하고 버전을 명시하세요.
+    # postgresqlVersion: 15
+
 services:
   # 1. 웹 서버 서비스 (Flask/Gunicorn)
   - type: web
@@ -21,7 +28,7 @@ services:
         sync: false
       - key: DATABASE_URL
         fromService:
-          type: postgres
+          type: psql
           name: pet-ai-db
           property: connectionString
 
@@ -44,19 +51,12 @@ services:
         sync: false
       - key: DATABASE_URL
         fromService:
-          type: postgres
+          type: psql
           name: pet-ai-db
           property: connectionString
 
-  # 3. Redis 데이터베이스 (작업 큐)
+  # 2. Redis 데이터베이스 (작업 큐)
   - type: redis
     name: pet-ai-redis
     plan: free # 무료 플랜 사용
     ipAllowList: [] # 같은 Render 계정 내 서비스들의 접근을 허용
-
-  # 4. PostgreSQL 데이터베이스
-  - type: postgres
-    name: pet-ai-db
-    plan: free # 무료 플랜 사용
-    # 데이터베이스 버전이 중요할 경우 아래 주석을 해제하고 버전을 명시하세요.
-    # postgresql_version: 15
