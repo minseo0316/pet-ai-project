@@ -507,6 +507,68 @@ def admin():
         if conn:
             conn.close()
 
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@login_required
+def delete_user(user_id):
+    if not current_user.is_admin:
+        flash('권한이 없습니다.', 'danger')
+        return redirect(url_for('admin'))
+    if user_id == current_user.id:
+        flash('자기 자신은 삭제할 수 없습니다.', 'warning')
+        return redirect(url_for('admin'))
+
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor()
+            # 관련 분석 기록 먼저 삭제
+            cur.execute("DELETE FROM analysis_history WHERE user_id = %s", (user_id,))
+            cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute("DELETE FROM analysis_history WHERE user_id = ?", (user_id,))
+            cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
+        conn.commit()
+        flash(f'사용자 ID {user_id}가 삭제되었습니다.', 'success')
+    except Exception as e:
+        flash(f'사용자 삭제 중 오류 발생: {e}', 'danger')
+    finally:
+        if conn:
+            conn.close()
+    return redirect(url_for('admin'))
+
+@app.route('/history/delete/<int:history_id>', methods=['POST'])
+@login_required
+def delete_history(history_id):
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor()
+            # 현재 로그인한 사용자의 기록만 삭제하도록 user_id를 함께 확인
+            cur.execute("DELETE FROM analysis_history WHERE id = %s AND user_id = %s", (history_id, current_user.id))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute("DELETE FROM analysis_history WHERE id = ? AND user_id = ?", (history_id, current_user.id))
+        
+        conn.commit()
+        
+        if cur.rowcount > 0:
+            flash(f'분석 기록이 삭제되었습니다.', 'success')
+        else:
+            flash('삭제할 기록을 찾지 못했거나 권한이 없습니다.', 'danger')
+    except Exception as e:
+        flash(f'기록 삭제 중 오류가 발생했습니다: {e}', 'danger')
+    finally:
+        if conn:
+            conn.close()
+    return redirect(url_for('history'))
+
 @app.route('/history')
 @login_required
 def history():

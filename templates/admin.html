@@ -18,6 +18,7 @@
                     <th scope="col">ID</th>
                     <th scope="col">사용자 이름</th>
                     <th scope="col">관리자 여부</th>
+                    <th scope="col">작업</th>
                 </tr>
             </thead>
             <tbody>
@@ -30,6 +31,15 @@
                             <span class="badge bg-success">예</span>
                         {% else %}
                             <span class="badge bg-danger">아니오</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if not user.is_admin %}
+                        <form action="{{ url_for('delete_user', user_id=user.id) }}" method="POST" onsubmit="return confirm('정말로 이 사용자를 삭제하시겠습니까? 모든 분석 기록도 함께 삭제됩니다.');">
+                            <button type="submit" class="btn btn-danger btn-sm">삭제</button>
+                        </form>
+                        {% else %}
+                        -
                         {% endif %}
                     </td>
                 </tr>

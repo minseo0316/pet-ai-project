@@ -17,6 +17,9 @@
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between">
                     <span>분석 일시: {{ record.created_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                    <form action="{{ url_for('delete_history', history_id=record.id) }}" method="POST" onsubmit="return confirm('이 분석 기록을 정말로 삭제하시겠습니까?');">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">삭제</button>
+                    </form>
                 </div>
                 <div class="card-body">
                     {% set result = record.analysis_result %}
