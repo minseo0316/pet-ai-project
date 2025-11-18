@@ -95,11 +95,14 @@
 
         // 페이지 로드 시 이전 대화 내용 표시
         window.onload = function() {
-            chatBox.innerHTML = ''; // 초기 메시지 삭제
-            conversationHistory.forEach(turn => {
-                // 'parts'가 배열이므로 첫 번째 요소를 사용
-                addMessage(turn.role, turn.parts[0]);
-            });
+            // 대화 기록이 있을 때만 화면을 다시 그림
+            if (conversationHistory && conversationHistory.length > 0) {
+                chatBox.innerHTML = ''; // 기존 내용 삭제
+                conversationHistory.forEach(turn => {
+                    // 'parts'가 배열이므로 첫 번째 요소를 사용
+                    addMessage(turn.role, turn.parts[0]);
+                });
+            }
             userInput.focus();
         };
 
