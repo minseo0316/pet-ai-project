@@ -329,8 +329,14 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
 # --- 4. Flask 라우트(경로) 설정 ---
 @app.route('/')
 def index():
-    behavior_options = list(BEHAVIOR_DB.keys())
-    return render_template('index.html', behaviors=behavior_options)
+    symptom_text = request.form.get('symptoms', '').strip()
+    uploaded_file = request.files.get('image')
+
+    if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
+        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys())), 400
+
+    image_path_relative = None
+    return render_template('index.html')
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
@@ -338,7 +344,7 @@ def analyze():
     uploaded_file = request.files.get('image')
 
     if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
-        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys())), 400
+        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다."), 400
 
     image_path_relative = None
     if uploaded_file and uploaded_file.filename != '':
@@ -352,7 +358,7 @@ def analyze():
             image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
         except Exception as e:
             print(f"이미지 처리 중 오류 발생: {e}")
-            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 400
+            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}"), 400
 
     selected_behaviors = request.form.getlist('behaviors')
 
@@ -383,7 +389,7 @@ def analyze():
     except Exception as e:
         print(f"분석 처리 중 오류: {e}")
         # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
-        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 500
+        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}"), 500
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -629,8 +635,7 @@ def obesity_check():
 @login_required
 def chatbot():
     """다이어트 플랜 챗봇 페이지를 렌더링합니다."""
-    behavior_options = list(BEHAVIOR_DB.keys())
-    return render_template('chatbot.html', behaviors=behavior_options)
+    return render_template('chatbot.html')
 
 @app.route('/ask_chatbot', methods=['POST'])
 @login_required
