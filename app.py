@@ -244,8 +244,6 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
     # form_data에서 필요한 값들을 다시 추출
     pet_type = form_data.get('pet_type', '고양이')
     symptom_text = form_data.get('symptoms', '').strip()
-    age_years = float(form_data.get('age', 2.0))
-    weight_kg = float(form_data.get('weight', 4.5))
 
     result_data = {}
     prompt_contexts = []
@@ -621,6 +619,51 @@ def obesity_check():
             result = assess_dog_obesity(age_years, weight_kg)
         return render_template('obesity_check.html', result=result)
     return render_template('obesity_check.html', result=None)
+
+@app.route('/chatbot')
+@login_required
+def chatbot():
+    """다이어트 플랜 챗봇 페이지를 렌더링합니다."""
+    return render_template('chatbot.html')
+
+@app.route('/ask_chatbot', methods=['POST'])
+@login_required
+def ask_chatbot():
+    """챗봇의 질문에 답변하는 API 엔드포인트"""
+    data = request.get_json()
+    user_message = data.get('message')
+    # 클라이언트에서 대화 기록을 받아옴
+    history = data.get('history', [])
+
+    if not user_message:
+        return jsonify({'error': '메시지가 없습니다.'}), 400
+
+    try:
+        # 챗봇을 위한 시스템 프롬프트
+        system_prompt = """
+        당신은 반려동물 영양학 전문 수의사 AI 챗봇입니다. 당신의 임무는 사용자와의 대화를 통해 반려동물의 정보를 얻고, 이를 바탕으로 안전하고 현실적인 다이어트 계획을 제안하는 것입니다.
+
+        규칙:
+        1. 항상 친절하고 전문적인 톤을 유지하세요.
+        2. 사용자의 반려동물 종류(강아지/고양이), 현재 체중, 목표 체중, 나이, 활동 수준, 현재 먹는 사료 종류와 양 등의 정보를 먼저 질문하여 파악하세요.
+        3. 정보가 충분히 모이면, 주 단위의 점진적인 다이어트 계획을 구체적인 식단과 운동량으로 제안해주세요.
+        4. 특정 브랜드의 사료를 추천하기보다는, '저칼로리 처방식 사료', '습식 사료' 등 종류를 추천하고, 일일 권장 칼로리를 계산해주세요.
+        5. 모든 조언의 마지막에는 "이 계획은 일반적인 가이드라인이며, 실제 적용 전에는 반드시 담당 수의사와 상담하시기 바랍니다." 라는 주의 문구를 포함해주세요.
+        """
+
+        # 모델 초기화 및 대화 시작
+        model = genai.GenerativeModel(
+            'models/gemini-2.5-flash',
+            system_instruction=system_prompt
+        )
+        chat = model.start_chat(history=history)
+        response = chat.send_message(user_message)
+
+        return jsonify({'response': response.text})
+
+    except Exception as e:
+        print(f"챗봇 응답 생성 중 오류 발생: {e}")
+        return jsonify({'error': '죄송합니다. 답변을 생성하는 중 오류가 발생했습니다.'}), 500
 
 _db_initialized = False
 @app.before_request
