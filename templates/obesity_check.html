@@ -22,17 +22,17 @@
                         <div class="col-md-4 form-group">
                             <label for="pet_type">반려동물 종류</label>
                             <select class="form-select" id="pet_type" name="pet_type">
-                                <option value="고양이" selected>고양이</option>
-                                <option value="강아지">강아지</option>
+                                <option value="고양이" {% if pet_type == '고양이' %}selected{% endif %}>고양이</option>
+                                <option value="강아지" {% if pet_type == '강아지' %}selected{% endif %}>강아지</option>
                             </select>
                         </div>
                         <div class="col-md-4 form-group">
                             <label for="age">나이 (세)</label>
-                            <input type="number" class="form-control" id="age" name="age" step="0.1" value="2.0" required>
+                            <input type="number" class="form-control" id="age" name="age" step="0.1" value="{{ age or '2.0' }}" required>
                         </div>
                         <div class="col-md-4 form-group">
                             <label for="weight">체중 (kg)</label>
-                            <input type="number" class="form-control" id="weight" name="weight" step="0.1" value="4.5" required>
+                            <input type="number" class="form-control" id="weight" name="weight" step="0.1" value="{{ weight or '4.5' }}" required>
                         </div>
                     </div>
                     <button type="submit" class="btn btn-primary mt-3">결과 확인하기</button>

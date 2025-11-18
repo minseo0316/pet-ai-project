@@ -434,9 +434,11 @@ def inject_behaviors():
 def analyze():
     symptom_text = request.form.get('symptoms', '').strip()
     uploaded_file = request.files.get('image')
+    selected_behaviors = request.form.getlist('behaviors')
 
-    if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
-        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다."), 400
+    # 사진, 증상, 이상 행동 중 하나라도 입력되었는지 확인
+    if not symptom_text and not (uploaded_file and uploaded_file.filename != '') and not selected_behaviors:
+        return render_template('index.html', error="사진, 증상 설명, 이상 행동 중 하나는 반드시 입력해야 합니다."), 400
 
     image_path_relative = None
     if uploaded_file and uploaded_file.filename != '':
@@ -451,8 +453,6 @@ def analyze():
         except Exception as e:
             print(f"이미지 처리 중 오류 발생: {e}")
             return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}"), 400
-
-    selected_behaviors = request.form.getlist('behaviors')
 
     # 동기식으로 분석을 직접 수행하고 결과를 바로 렌더링합니다.
     try:
@@ -691,7 +691,7 @@ def obesity_check():
             result = assess_cat_obesity(age_years, weight_kg)
         else: # 강아지
             result = assess_dog_obesity(age_years, weight_kg)
-        return render_template('obesity_check.html', result=result)
+        return render_template('obesity_check.html', result=result, pet_type=pet_type, age=age_years, weight=weight_kg)
     return render_template('obesity_check.html', result=None)
 
 @app.route('/chatbot') # 챗봇 페이지 라우트
