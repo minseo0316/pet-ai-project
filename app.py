@@ -527,12 +527,17 @@ def history():
         
         # JSON 텍스트를 파이썬 딕셔너리로 변환
         import json
-        processed_history = []
-        for record in history_records:
-            processed_record = dict(record)
-            processed_record['analysis_result'] = json.loads(processed_record['analysis_result'])
-            processed_history.append(processed_record)
-            
+        if database_url:
+            # Postgres의 JSONB는 이미 dict로 변환되어 오므로 추가 변환이 필요 없음
+            processed_history = [dict(r) for r in history_records]
+        else:
+            # SQLite는 TEXT로 저장했으므로 JSON 파싱이 필요
+            processed_history = []
+            for record in history_records:
+                processed_record = dict(record)
+                processed_record['analysis_result'] = json.loads(processed_record['analysis_result'])
+                processed_history.append(processed_record)
+
         return render_template('history.html', history=processed_history)
     finally:
         if conn:

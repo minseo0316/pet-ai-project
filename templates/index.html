@@ -4,170 +4,124 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pet.AI - 반려동물 건강 분석</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <nav class="auth-nav">
-        <div class="container">
-            {% if current_user.is_authenticated %}
-                <span class="welcome-message">환영합니다, <strong>{{ current_user.username }}</strong>님!</span>
-                <div class="auth-links">
-                    {% if current_user.is_admin %}
-                        <a href="{{ url_for('admin') }}">관리자 페이지</a>
+    <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm">
+        <div class="container-fluid container">
+            <a class="navbar-brand" href="{{ url_for('index') }}">🐾 Pet.AI</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    {% if current_user.is_authenticated %}
+                        <li class="nav-item">
+                            <span class="navbar-text me-3">환영합니다, <strong>{{ current_user.username }}</strong>님!</span>
+                        </li>
+                        {% if current_user.is_admin %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('admin') }}">관리자 페이지</a>
+                        </li>
+                        {% endif %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('history') }}">내 분석 기록</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('logout') }}">로그아웃</a>
+                        </li>
+                    {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('login') }}">로그인</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('register') }}">회원가입</a>
+                        </li>
                     {% endif %}
-                    <a href="{{ url_for('history') }}">내 분석 기록</a>
-                    <a href="{{ url_for('logout') }}">로그아웃</a>
-                </div>
-            {% else %}
-                <div class="auth-links">
-                    <a href="{{ url_for('login') }}">로그인</a>
-                    <a href="{{ url_for('register') }}">회원가입</a>
-                </div>
-            {% endif %}
+                </ul>
+            </div>
         </div>
     </nav>
+
     <div class="container">
-        <header>
+        <header class="main-header">
             <h1><i class="fa-solid fa-paw"></i> Pet.AI</h1>
             <p>AI와 함께 반려동물의 건강 상태를 점검해보세요</p>
         </header>
 
-        <div class="main-content">
-            <div class="form-container">
-                <h2>분석 정보 입력</h2>
+        <div class="card">
+            <div class="card-header">분석 정보 입력</div>
+            <div class="card-body">
                 <form action="/analyze" method="post" enctype="multipart/form-data">
-                    <div class="form-group">
-                        <label for="pet_type">반려동물 종류</label>
-                        <select id="pet_type" name="pet_type">
-                            <option value="고양이" selected>고양이</option>
-                            <option value="강아지">강아지</option>
-                        </select>
+                    <div class="row">
+                        <div class="col-md-4 form-group">
+                            <label for="pet_type">반려동물 종류</label>
+                            <select class="form-select" id="pet_type" name="pet_type">
+                                <option value="고양이" selected>고양이</option>
+                                <option value="강아지">강아지</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label for="age">나이 (세)</label>
+                            <input type="number" class="form-control" id="age" name="age" step="0.1" value="2.0" required>
+                        </div>
+                        <div class="col-md-4 form-group">
+                            <label for="weight">체중 (kg)</label>
+                            <input type="number" class="form-control" id="weight" name="weight" step="0.1" value="4.5" required>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="age">나이 (세)</label>
-                        <input type="number" id="age" name="age" step="0.1" value="2.0" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="weight">체중 (kg)</label>
-                        <input type="number" id="weight" name="weight" step="0.1" value="4.5" required>
-                    </div>
+
                     <div class="form-group">
                         <label for="image">사진 업로드 (선택)</label>
-                        <input type="file" id="image" name="image" accept="image/*">
+                        <input type="file" class="form-control" id="image" name="image" accept="image/*">
                         <div id="image-preview-container" class="mt-2" style="display:none;">
-                            <p class="mb-1"><small>미리보기</small></p>
-                            <img id="image-preview" src="#" alt="Image preview" style="max-width: 100%; max-height: 200px; border-radius: 4px;"/>
+                            <img id="image-preview" src="#" alt="Image preview" style="max-width: 100%; max-height: 200px; border-radius: 8px;"/>
                         </div>
                     </div>
                     <div class="form-group">
                         <label for="symptoms">증상 설명 (선택)</label>
-                        <textarea id="symptoms" name="symptoms" rows="4" placeholder="예: 최근 눈을 자주 찡그리고 눈물이 많아졌어요."></textarea>
+                        <textarea class="form-control" id="symptoms" name="symptoms" rows="4" placeholder="예: 최근 눈을 자주 찡그리고 눈물이 많아졌어요."></textarea>
                     </div>
                     <div class="form-group">
                         <label>이상 행동 (다중 선택 가능)</label>
                         <div class="behavior-checkboxes">
                             {% for behavior in behaviors %}
-                            <label>
-                                <input type="checkbox" name="behaviors" value="{{ behavior }}"> {{ behavior }}
-                            </label>
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="behaviors" id="chk-{{ behavior }}" value="{{ behavior }}">
+                                <label class="form-check-label" for="chk-{{ behavior }}">{{ behavior }}</label>
+                            </div>
                             {% endfor %}
                         </div>
                     </div>
 
-                    <button type="submit" class="submit-btn"><i class="fa-solid fa-magnifying-glass"></i> 분석 시작하기</button>
+                    <button type="submit" class="btn btn-primary btn-lg mt-3"><i class="fa-solid fa-magnifying-glass"></i> 분석 시작하기</button>
                 </form>
                 {% if error %}
-                    <div class="error-message">{{ error }}</div>
+                    <div class="alert alert-danger mt-3">{{ error }}</div>
                 {% endif %}
             </div>
-
-            {% if result %}
-            <div class="results-container">
-                <h2><i class="fa-solid fa-notes-medical"></i> AI 분석 결과</h2>
-
-                <!-- AI 수의사 종합 소견 -->
-                <div class="card">
-                    <div class="card-header">
-                        <h3><i class="fa-solid fa-user-doctor"></i> AI 수의사 종합 소견</h3>
-                    </div>
-                    <div class="card-body">
-                        {% if result.image_path %}
-                        <div class="uploaded-image">
-                            <img src="{{ url_for('static', filename=result.image_path) }}" alt="업로드된 사진">
-                            <p class="caption">보호자님이 업로드한 사진</p>
-                        </div>
-                        {% endif %}
-                        <p class="gemini-response">
-                            {{ result.gemini_response | safe }}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- 이상 행동 분석 -->
-                {% if result.behavior_analysis %}
-                <div class="card">
-                    <div class="card-header">
-                        <h3><i class="fa-solid fa-person-circle-question"></i> 이상 행동 분석</h3>
-                    </div>
-                    <div class="card-body">
-                        <ul>
-                        {% for analysis in result.behavior_analysis %}
-                            <li>
-                                <strong>{{ analysis.behavior }}:</strong>
-                                <p><strong>의심 원인:</strong> {{ analysis.possible_causes | join(', ') }}</p>
-                                <p><strong>보호자 코칭:</strong> {{ analysis.coaching }}</p>
-                            </li>
-                        {% endfor %}
-                        </ul>
-                    </div>
-                </div>
-                {% endif %}
-
-                <!-- 비만도 분석 -->
-                {% if result.obesity_analysis and result.obesity_analysis.assessable %}
-                <div class="card">
-                    <div class="card-header">
-                        <h3><i class="fa-solid fa-weight-scale"></i> 비만도 체크</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="obesity-result status-{{ result.obesity_analysis.status }}">
-                            <span class="status-label">{{ result.obesity_analysis.status }}</span>
-                            <p>{{ result.obesity_analysis.message }}</p>
-                            <p>(기준 평균 체중: {{ result.obesity_analysis.ideal_kg }}kg)</p>
-                        </div>
-                    </div>
-                </div>
-                {% elif result.obesity_analysis and not result.obesity_analysis.assessable %}
-                 <div class="card">
-                    <div class="card-header">
-                        <h3><i class="fa-solid fa-weight-scale"></i> 비만도 체크</h3>
-                    </div>
-                    <div class="card-body">
-                        <p>{{ result.obesity_analysis.message }}</p>
-                    </div>
-                </div>
-                {% endif %}
-
-            </div>
-            {% endif %}
         </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.getElementById('image').addEventListener('change', function(event) {
             const previewContainer = document.getElementById('image-preview-container');
             const preview = document.getElementById('image-preview');
             const file = event.target.files[0];
 
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    preview.src = e.target.result;
-                    previewContainer.style.display = 'block';
+            {% if current_user.is_authenticated %}
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        preview.src = e.target.result;
+                        previewContainer.style.display = 'block';
+                    }
+                    reader.readAsDataURL(file);
                 }
-                reader.readAsDataURL(file);
-            }
-        });
-    </script>
+            });
+        </script>
 </body>
 </html>
