@@ -1,7 +1,7 @@
 # app.py
 import os
 import sqlite3
-from flask import Flask, request, render_template, url_for, jsonify
+from flask import Flask, request, render_template, url_for, jsonify, flash, redirect
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import psycopg2, psycopg2.extras
 import google.generativeai as genai
@@ -354,12 +354,12 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
 def index():
     return render_template('index.html') # 메인 페이지만을 렌더링합니다.
 
-# --- 컨텍스트 프로세서: 모든 템플릿에서 사용할 변수 등록 ---
 @app.context_processor
 def inject_behaviors():
     return dict(behaviors=list(BEHAVIOR_DB.keys()))
 
 @app.route('/analyze', methods=['POST'])
+@login_required
 def analyze():
     symptom_text = request.form.get('symptoms', '').strip()
     uploaded_file = request.files.get('image')
@@ -412,35 +412,6 @@ def analyze():
         # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
         return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}"), 500
 
-# --- 사용자 인증 관련 라우트 ---
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-        database_url = os.environ.get("DATABASE_URL")
-        conn = None
-        try:
-            if database_url:
-                conn = psycopg2.connect(database_url)
-                cur = conn.cursor()
-                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
-            else:
-                conn = sqlite3.connect(DB_FILE)
-                cur = conn.cursor()
-                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
-            conn.commit()
-            flash('회원가입이 완료되었습니다. 로그인해주세요.', 'success')
-            return redirect(url_for('login'))
-        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
-            flash('이미 존재하는 사용자 이름입니다.', 'danger')
-        finally:
-            if conn:
-                conn.close()
-    return render_template('register.html')
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -475,8 +446,43 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
-    logout_user()
-    return redirect(url_for('index'))
+    try:
+        logout_user()
+        flash('로그아웃되었습니다.', 'success')
+        return redirect(url_for('index'))
+    except Exception as e:
+        print(f"로그아웃 중 오류 발생: {e}")
+        # 오류가 발생해도 로그아웃 처리
+        logout_user()
+        return redirect(url_for('index'))
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        database_url = os.environ.get("DATABASE_URL")
+        conn = None
+        try:
+            if database_url:
+                conn = psycopg2.connect(database_url)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
+            else:
+                conn = sqlite3.connect(DB_FILE)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
+            conn.commit()
+            flash('회원가입이 완료되었습니다. 로그인해주세요.', 'success')
+            return redirect(url_for('login'))
+        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
+            flash('이미 존재하는 사용자 이름입니다.', 'danger')
+        finally:
+            if conn:
+                conn.close()
+    return render_template('register.html')
 
 @app.route('/admin')
 @login_required
