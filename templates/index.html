@@ -8,6 +8,24 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
+    <nav class="auth-nav">
+        <div class="container">
+            {% if current_user.is_authenticated %}
+                <span class="welcome-message">환영합니다, <strong>{{ current_user.username }}</strong>님!</span>
+                <div class="auth-links">
+                    {% if current_user.is_admin %}
+                        <a href="{{ url_for('admin') }}">관리자 페이지</a>
+                    {% endif %}
+                    <a href="{{ url_for('logout') }}">로그아웃</a>
+                </div>
+            {% else %}
+                <div class="auth-links">
+                    <a href="{{ url_for('login') }}">로그인</a>
+                    <a href="{{ url_for('register') }}">회원가입</a>
+                </div>
+            {% endif %}
+        </div>
+    </nav>
     <div class="container">
         <header>
             <h1><i class="fa-solid fa-paw"></i> Pet.AI</h1>
