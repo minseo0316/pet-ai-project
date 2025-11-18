@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마이페이지</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <header class="main-header">
+            <h1><i class="fa-solid fa-user-circle"></i> 마이페이지</h1>
+            <p>{{ current_user.username }}님의 개인화된 공간입니다.</p>
+        </header>
+
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title"><i class="fa-solid fa-weight-scale"></i> 비만도 체크</h5>
+                        <p class="card-text">반려동물의 나이와 체중을 입력하여 비만도를 확인해보세요.</p>
+                        <a href="{{ url_for('obesity_check') }}" class="btn btn-primary">바로가기</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <h5 class="card-title"><i class="fa-solid fa-robot"></i> 다이어트 플랜 챗봇 (준비중)</h5>
+                        <p class="card-text">AI 챗봇과 함께 맞춤형 다이어트 계획을 세워보세요.</p>
+                        <a href="#" class="btn btn-secondary disabled">준비중</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-4">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">메인으로 돌아가기</a>
+        </div>
+    </div>
+</body>
+</html>

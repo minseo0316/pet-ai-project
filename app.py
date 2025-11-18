@@ -321,11 +321,6 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         if selected_behaviors:
             result_data['behavior_analysis'] = analyze_behaviors(selected_behaviors, symptom_text)
         
-        if pet_type == '고양이':
-            result_data['obesity_analysis'] = assess_cat_obesity(age_years, weight_kg)
-        elif pet_type == '강아지':
-            result_data['obesity_analysis'] = assess_dog_obesity(age_years, weight_kg)
-
         return result_data
 
     except Exception as e:
@@ -605,6 +600,28 @@ def history():
         if conn:
             conn.close()
 
+@app.route('/mypage')
+@login_required
+def mypage():
+    """마이페이지 렌더링"""
+    return render_template('mypage.html')
+
+@app.route('/obesity_check', methods=['GET', 'POST'])
+@login_required
+def obesity_check():
+    """비만도 체크 기능"""
+    if request.method == 'POST':
+        pet_type = request.form.get('pet_type')
+        age_years = float(request.form.get('age', 0))
+        weight_kg = float(request.form.get('weight', 0))
+        
+        if pet_type == '고양이':
+            result = assess_cat_obesity(age_years, weight_kg)
+        else: # 강아지
+            result = assess_dog_obesity(age_years, weight_kg)
+        return render_template('obesity_check.html', result=result)
+    return render_template('obesity_check.html', result=None)
+
 _db_initialized = False
 @app.before_request
 def initialize_database():
@@ -617,7 +634,7 @@ def initialize_database():
 @app.errorhandler(500)
 def internal_error(error):
     print(f"500 Error: {error}")
-    return render_template('index.html', error="서버 오류가 발생했습니다. 다시 시도해주세요.", behaviors=list(BEHAVIOR_DB.keys())), 500
+    return render_template('500.html'), 500
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
