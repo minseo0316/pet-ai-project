@@ -434,8 +434,25 @@ def admin():
     if not current_user.is_admin:
         flash('관리자만 접근할 수 있습니다.', 'danger')
         return redirect(url_for('index'))
-    # 여기에 사용자 관리 로직 추가 예정
-    return "<h1>관리자 페이지</h1><p>환영합니다, 관리자님!</p>"
+    
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT id, username, is_admin FROM users ORDER BY id")
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT id, username, is_admin FROM users ORDER BY id")
+        
+        users = cur.fetchall()
+        return render_template('admin.html', users=users)
+    finally:
+        if conn:
+            conn.close()
 
 _db_initialized = False
 @app.before_request
