@@ -1,7 +1,7 @@
 # app.py
 import os
 import sqlite3
-from flask import Flask, request, render_template, url_for, jsonify, flash, redirect
+from flask import Flask, request, render_template, url_for, jsonify
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import psycopg2, psycopg2.extras
 import google.generativeai as genai
@@ -34,29 +34,6 @@ class User(UserMixin):
         self.id = id
         self.username = username
         self.is_admin = is_admin
-
-@login_manager.user_loader
-def load_user(user_id):
-    database_url = os.environ.get("DATABASE_URL")
-    conn = None
-    try:
-        if database_url:
-            conn = psycopg2.connect(database_url)
-            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-        else:
-            conn = sqlite3.connect(DB_FILE)
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        
-        user_data = cur.fetchone()
-        if user_data:
-            return User(id=user_data['id'], username=user_data['username'], is_admin=user_data['is_admin'])
-        return None
-    finally:
-        if conn:
-            conn.close()
 
 # --- 2. Gemini API 설정 ---
 try:
@@ -352,20 +329,16 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
 # --- 4. Flask 라우트(경로) 설정 ---
 @app.route('/')
 def index():
-    return render_template('index.html') # 메인 페이지만을 렌더링합니다.
-
-@app.context_processor
-def inject_behaviors():
-    return dict(behaviors=list(BEHAVIOR_DB.keys()))
+    behavior_options = list(BEHAVIOR_DB.keys())
+    return render_template('index.html', behaviors=behavior_options)
 
 @app.route('/analyze', methods=['POST'])
-@login_required
 def analyze():
     symptom_text = request.form.get('symptoms', '').strip()
     uploaded_file = request.files.get('image')
 
     if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
-        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다."), 400
+        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys())), 400
 
     image_path_relative = None
     if uploaded_file and uploaded_file.filename != '':
@@ -379,7 +352,7 @@ def analyze():
             image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
         except Exception as e:
             print(f"이미지 처리 중 오류 발생: {e}")
-            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}"), 400
+            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 400
 
     selected_behaviors = request.form.getlist('behaviors')
 
@@ -410,7 +383,59 @@ def analyze():
     except Exception as e:
         print(f"분석 처리 중 오류: {e}")
         # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
-        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}"), 500
+        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 500
+
+# --- 사용자 인증 관련 라우트 ---
+@login_manager.user_loader
+def load_user(user_id):
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        
+        user_data = cur.fetchone()
+        if user_data:
+            return User(id=user_data['id'], username=user_data['username'], is_admin=user_data['is_admin'])
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        database_url = os.environ.get("DATABASE_URL")
+        conn = None
+        try:
+            if database_url:
+                conn = psycopg2.connect(database_url)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
+            else:
+                conn = sqlite3.connect(DB_FILE)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
+            conn.commit()
+            flash('회원가입이 완료되었습니다. 로그인해주세요.', 'success')
+            return redirect(url_for('login'))
+        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
+            flash('이미 존재하는 사용자 이름입니다.', 'danger')
+        finally:
+            if conn:
+                conn.close()
+    return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -446,43 +471,8 @@ def login():
 @app.route('/logout')
 @login_required
 def logout():
-    try:
-        logout_user()
-        flash('로그아웃되었습니다.', 'success')
-        return redirect(url_for('index'))
-    except Exception as e:
-        print(f"로그아웃 중 오류 발생: {e}")
-        # 오류가 발생해도 로그아웃 처리
-        logout_user()
-        return redirect(url_for('index'))
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-        database_url = os.environ.get("DATABASE_URL")
-        conn = None
-        try:
-            if database_url:
-                conn = psycopg2.connect(database_url)
-                cur = conn.cursor()
-                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
-            else:
-                conn = sqlite3.connect(DB_FILE)
-                cur = conn.cursor()
-                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
-            conn.commit()
-            flash('회원가입이 완료되었습니다. 로그인해주세요.', 'success')
-            return redirect(url_for('login'))
-        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
-            flash('이미 존재하는 사용자 이름입니다.', 'danger')
-        finally:
-            if conn:
-                conn.close()
-    return render_template('register.html')
+    logout_user()
+    return redirect(url_for('index'))
 
 @app.route('/admin')
 @login_required
@@ -687,7 +677,7 @@ def initialize_database():
 @app.errorhandler(500)
 def internal_error(error):
     print(f"500 Error: {error}")
-    return "Internal Server Error", 500
+    return render_template('500.html'), 500
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':

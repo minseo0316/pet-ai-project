@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>다이어트 플랜 챗봇</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .chat-container {
+            max-width: 800px;
+            margin: 30px auto;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-box {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 12px 12px 0 0;
+        }
+        .chat-message {
+            margin-bottom: 15px;
+            display: flex;
+        }
+        .chat-message .message-bubble {
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 80%;
+        }
+        .user-message {
+            justify-content: flex-end;
+        }
+        .user-message .message-bubble {
+            background-color: var(--primary-color);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .model-message {
+            justify-content: flex-start;
+        }
+        .model-message .message-bubble {
+            background-color: #E9ECEF;
+            color: var(--text-color);
+            border-bottom-left-radius: 4px;
+        }
+        .chat-input {
+            display: flex;
+            padding: 15px;
+            background-color: #fff;
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 12px 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="main-header">
+            <h1><i class="fa-solid fa-robot"></i> 다이어트 플랜 챗봇</h1>
+            <p>AI 영양사와 함께 반려동물의 건강한 다이어트를 계획해보세요.</p>
+        </header>
+
+        <div class="chat-container">
+            <div class="chat-box" id="chat-box">
+                <div class="chat-message model-message">
+                    <div class="message-bubble">안녕하세요! 반려동물의 건강한 다이어트를 도와드릴 AI 영양사입니다. 먼저 반려동물의 종류와 현재 체중을 알려주시겠어요?</div>
+                </div>
+            </div>
+            <form class="chat-input" id="chat-form">
+                <input type="text" class="form-control me-2" id="user-input" placeholder="메시지를 입력하세요..." autocomplete="off" required>
+                <button type="submit" class="btn btn-primary">전송</button>
+            </form>
+        </div>
+         <div class="text-center mt-4">
+            <a href="{{ url_for('mypage') }}" class="btn btn-outline-secondary">마이페이지로 돌아가기</a>
+        </div>
+    </div>
+
+    <script>
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const chatBox = document.getElementById('chat-box');
+        let conversationHistory = [];
+
+        function addMessage(sender, message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('chat-message', `${sender}-message`);
+            
+            const bubbleDiv = document.createElement('div');
+            bubbleDiv.classList.add('message-bubble');
+            bubbleDiv.textContent = message;
+
+            messageDiv.appendChild(bubbleDiv);
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        chatForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            addMessage('user', message);
+            userInput.value = '';
+            userInput.disabled = true;
+
+            // 대화 기록에 사용자 메시지 추가
+            conversationHistory.push({ role: 'user', parts: [message] });
+
+            try {
+                const response = await fetch('/ask_chatbot', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message, history: conversationHistory })
+                });
+
+                const data = await response.json();
+                addMessage('model', data.response);
+                
+                // 대화 기록에 모델 응답 추가
+                conversationHistory.push({ role: 'model', parts: [data.response] });
+
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('model', '죄송합니다. 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+            } finally {
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        });
+    </script>
+</body>
+</html>
