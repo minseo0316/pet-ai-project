@@ -329,14 +329,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
 # --- 4. Flask 라우트(경로) 설정 ---
 @app.route('/')
 def index():
-    symptom_text = request.form.get('symptoms', '').strip()
-    uploaded_file = request.files.get('image')
-
-    if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
-        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys())), 400
-
-    image_path_relative = None
-    return render_template('index.html')
+    return render_template('index.html') # 메인 페이지만을 렌더링합니다.
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
