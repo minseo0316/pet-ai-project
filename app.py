@@ -376,8 +376,8 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         # --- 신뢰도 평가 프롬프트 추가 ---
         confidence_prompt = """
         [신뢰도 평가]
-        지금까지의 정보를 바탕으로, 당신의 최종 진단에 대한 신뢰도를 '높음', '중간', '낮음' 중 하나로 평가하고 그 이유를 한 문장으로 설명해주세요.
-        신뢰도: [높음/중간/낮음]
+        지금까지의 정보를 바탕으로, 당신의 최종 진단에 대한 신뢰도를 0%에서 100% 사이의 백분율 숫자로 평가하고 그 이유를 한 문장으로 설명해주세요.
+        신뢰도: [숫자]%
         이유: [이유]
         """
 
@@ -406,8 +406,29 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         {confidence_prompt}
         '''
         response = model.generate_content(prompt)
-        # Gemini가 생성한 마크다운 텍스트를 HTML로 변환
-        result_data['gemini_response'] = markdown.markdown(response.text)
+        raw_text = response.text
+
+        # 신뢰도 부분 파싱
+        try:
+            # '[신뢰도 평가]' 섹션을 기준으로 텍스트 분리
+            main_response_text, confidence_section = raw_text.split('[신뢰도 평가]', 1)
+            
+            # 신뢰도 점수와 이유 추출
+            score_line = [line for line in confidence_section.split('\n') if '신뢰도:' in line][0]
+            reason_line = [line for line in confidence_section.split('\n') if '이유:' in line][0]
+
+            # 숫자만 추출 (예: "신뢰도: 90%" -> 90)
+            confidence_score = int(''.join(filter(str.isdigit, score_line)))
+            confidence_reason = reason_line.split(':', 1)[1].strip()
+
+            result_data['confidence'] = {
+                'score': confidence_score,
+                'reason': confidence_reason
+            }
+            result_data['gemini_response'] = markdown.markdown(main_response_text.strip())
+        except (ValueError, IndexError):
+            # 파싱 실패 시 전체 텍스트를 그대로 보여줌
+            result_data['gemini_response'] = markdown.markdown(raw_text)
 
         # --- 추가 분석 (이상행동, 비만) ---
         if selected_behaviors:

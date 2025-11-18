@@ -38,6 +38,23 @@
                             {{ result.gemini_response | safe }}
                         </div>
 
+                        <!-- 신뢰도 평가 표시 -->
+                        {% if result.confidence %}
+                        <div class="alert alert-light border">
+                            <h5 class="alert-heading"><i class="fa-solid fa-check-double"></i> 진단 신뢰도</h5>
+                            <p>
+                                <span class="badge fs-6
+                                    {% if result.confidence.score >= 80 %}bg-success
+                                    {% elif result.confidence.score >= 50 %}bg-warning text-dark
+                                    {% else %}bg-danger
+                                    {% endif %}">
+                                    {{ result.confidence.score }}%
+                                </span>
+                                {{ result.confidence.reason }}
+                            </p>
+                        </div>
+                        {% endif %}
+
                         <!-- 추가 분석 결과 -->
                         {% if result.behavior_analysis or result.obesity_analysis %}
                         <hr>
