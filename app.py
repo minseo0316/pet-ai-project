@@ -2,12 +2,14 @@
 import os
 import sqlite3
 from flask import Flask, request, render_template, url_for, jsonify
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import psycopg2, psycopg2.extras
 import google.generativeai as genai
 import markdown
 from PIL import Image
 from werkzeug.utils import secure_filename
-
+from werkzeug.security import generate_password_hash, check_password_hash
+import bcrypt
 from petai_utils import analyze_behaviors, assess_cat_obesity, assess_dog_obesity, BEHAVIOR_DB
 
 
@@ -75,6 +77,26 @@ def run_db_setup():
             else:
                 print("Postgres: 데이터가 이미 존재하므로 초기화를 건너뜁니다.")
 
+            # 사용자 테이블 생성
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id SERIAL PRIMARY KEY,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    is_admin BOOLEAN DEFAULT FALSE
+                )
+            ''')
+            conn.commit()
+            print("Postgres: users 테이블 생성 확인 완료.")
+
+            # 관리자 계정이 없으면 생성
+            cur.execute("SELECT id FROM users WHERE username = 'admin'")
+            if cur.fetchone() is None:
+                hashed_password = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                cur.execute("INSERT INTO users (username, password, is_admin) VALUES ('admin', %s, TRUE)", (hashed_password,))
+                conn.commit()
+                print("Postgres: 기본 관리자(admin) 계정 생성 완료.")
+
             cur.close()
             conn.close()
         except Exception as e:
@@ -92,11 +114,28 @@ def run_db_setup():
                 )
             ''')
             conn.commit()
+
             cur.execute("SELECT COUNT(*) FROM diseases")
             if cur.fetchone()[0] == 0:
                 insert_q = '''INSERT INTO diseases (disease_name, image_labels, text_symptoms, warning_level, advice) VALUES (?,?,?,?,?)'''
                 cur.executemany(insert_q, diseases_data)
                 conn.commit()
+
+            # 사용자 테이블 생성 (SQLite)
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password TEXT NOT NULL,
+                    is_admin BOOLEAN DEFAULT FALSE
+                )
+            ''')
+            cur.execute("SELECT id FROM users WHERE username = 'admin'")
+            if cur.fetchone() is None:
+                hashed_password = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                cur.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)", ('admin', hashed_password, True))
+                conn.commit()
+
             conn.close()
         except Exception as e:
             print(f"SQLite DB 설정 중 오류 발생: {e}")
@@ -287,6 +326,103 @@ def analyze():
         # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
         return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 500
 
+# --- 사용자 인증 관련 라우트 ---
+@login_manager.user_loader
+def load_user(user_id):
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        
+        user_data = cur.fetchone()
+        if user_data:
+            return User(id=user_data['id'], username=user_data['username'], is_admin=user_data['is_admin'])
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        database_url = os.environ.get("DATABASE_URL")
+        conn = None
+        try:
+            if database_url:
+                conn = psycopg2.connect(database_url)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
+            else:
+                conn = sqlite3.connect(DB_FILE)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
+            conn.commit()
+            flash('회원가입이 완료되었습니다. 로그인해주세요.', 'success')
+            return redirect(url_for('login'))
+        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
+            flash('이미 존재하는 사용자 이름입니다.', 'danger')
+        finally:
+            if conn:
+                conn.close()
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        
+        database_url = os.environ.get("DATABASE_URL")
+        conn = None
+        try:
+            if database_url:
+                conn = psycopg2.connect(database_url)
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute("SELECT * FROM users WHERE username = %s", (username,))
+            else:
+                conn = sqlite3.connect(DB_FILE)
+                conn.row_factory = sqlite3.Row
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+            
+            user_data = cur.fetchone()
+            if user_data and bcrypt.checkpw(password.encode('utf-8'), user_data['password'].encode('utf-8')):
+                user = User(id=user_data['id'], username=user_data['username'], is_admin=user_data['is_admin'])
+                login_user(user)
+                return redirect(url_for('index'))
+            else:
+                flash('사용자 이름 또는 비밀번호가 올바르지 않습니다.', 'danger')
+        finally:
+            if conn:
+                conn.close()
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('index'))
+
+@app.route('/admin')
+@login_required
+def admin():
+    if not current_user.is_admin:
+        flash('관리자만 접근할 수 있습니다.', 'danger')
+        return redirect(url_for('index'))
+    # 여기에 사용자 관리 로직 추가 예정
+    return "<h1>관리자 페이지</h1><p>환영합니다, 관리자님!</p>"
 
 _db_initialized = False
 @app.before_request
