@@ -1,7 +1,7 @@
 # app.py
 import os
 import sqlite3
-from flask import Flask, request, render_template, url_for, jsonify
+from flask import Flask, request, render_template, url_for, jsonify, flash, redirect
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 import psycopg2, psycopg2.extras
 import google.generativeai as genai
