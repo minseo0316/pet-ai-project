@@ -16,11 +16,24 @@ from petai_utils import analyze_behaviors, assess_cat_obesity, assess_dog_obesit
 # --- 1. Flask 앱 설정 ---
 app = Flask(__name__)
 UPLOAD_FOLDER = 'static/uploads'
+app.config['SECRET_KEY'] = os.urandom(24) # 세션 관리를 위한 시크릿 키
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 DB_FILE = 'pet_health.db'
+
+# --- Flask-Login 설정 ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login' # 로그인 안 한 사용자가 login_required 페이지 접근 시 리디렉션
+
+# --- User 모델 정의 ---
+class User(UserMixin):
+    def __init__(self, id, username, is_admin=False):
+        self.id = id
+        self.username = username
+        self.is_admin = is_admin
 
 # --- 2. Gemini API 설정 ---
 try:
