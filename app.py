@@ -35,6 +35,29 @@ class User(UserMixin):
         self.username = username
         self.is_admin = is_admin
 
+@login_manager.user_loader
+def load_user(user_id):
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        
+        user_data = cur.fetchone()
+        if user_data:
+            return User(id=user_data['id'], username=user_data['username'], is_admin=user_data['is_admin'])
+        return None
+    finally:
+        if conn:
+            conn.close()
+
 # --- 2. Gemini API 설정 ---
 try:
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -331,6 +354,11 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
 def index():
     return render_template('index.html') # 메인 페이지만을 렌더링합니다.
 
+# --- 컨텍스트 프로세서: 모든 템플릿에서 사용할 변수 등록 ---
+@app.context_processor
+def inject_behaviors():
+    return dict(behaviors=list(BEHAVIOR_DB.keys()))
+
 @app.route('/analyze', methods=['POST'])
 def analyze():
     symptom_text = request.form.get('symptoms', '').strip()
@@ -383,34 +411,6 @@ def analyze():
         print(f"분석 처리 중 오류: {e}")
         # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
         return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}"), 500
-
-@login_manager.user_loader
-def load_user(user_id):
-    database_url = os.environ.get("DATABASE_URL")
-    conn = None
-    try:
-        if database_url:
-            conn = psycopg2.connect(database_url)
-            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-        else:
-            conn = sqlite3.connect(DB_FILE)
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        
-        user_data = cur.fetchone()
-        if user_data:
-            return User(id=user_data['id'], username=user_data['username'], is_admin=user_data['is_admin'])
-        return None
-    finally:
-        if conn:
-            conn.close()
-
-# --- 컨텍스트 프로세서: 모든 템플릿에서 사용할 변수 등록 ---
-@app.context_processor
-def inject_behaviors():
-    return dict(behaviors=list(BEHAVIOR_DB.keys()))
 
 # --- 사용자 인증 관련 라우트 ---
 @app.route('/register', methods=['GET', 'POST'])
