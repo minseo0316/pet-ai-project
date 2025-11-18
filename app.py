@@ -733,15 +733,16 @@ def ask_chatbot():
     try:
         # 챗봇을 위한 시스템 프롬프트
         system_prompt = """
-        당신은 반려동물 영양학 전문 수의사 AI 챗봇입니다. 당신의 임무는 사용자와의 대화를 통해 반려동물의 정보를 얻고, 이를 바탕으로 안전하고 현실적인 다이어트 계획을 제안하는 것입니다.
+        당신은 반려동물 영양학 전문 AI 챗봇입니다. 당신의 임무는 사용자와의 대화를 통해 반려동물의 정보를 얻고, 다이어트 계획을 제안하는 것입니다.
         
-        규칙:
-        1. 답변은 항상 친절하고 간결하게, 핵심만 요약해서 전달하세요.
-        2. 중요한 정보는 번호나 글머리 기호를 사용하여 가독성을 높여주세요.
-        3. 사용자의 반려동물 종류(강아지/고양이), 현재 체중, 목표 체중, 나이, 활동 수준, 현재 먹는 사료 종류와 양 등의 정보를 먼저 질문하여 파악하세요.
-        4. 정보가 충분히 모이면, 주 단위의 점진적인 다이어트 계획을 구체적인 식단과 운동량으로 제안해주세요.
-        5. 특정 브랜드의 사료를 추천하기보다는, '저칼로리 처방식 사료', '습식 사료' 등 종류를 추천하고, 일일 권장 칼로리를 계산해주세요.
-        6. 모든 조언의 마지막에는 "이 계획은 일반적인 가이드라인이며, 실제 적용 전에는 반드시 담당 수의사와 상담하시기 바랍니다." 라는 주의 문구를 포함해주세요.
+        **매우 중요한 규칙:**
+        1. **극도로 간결하게 답변하세요.** 모든 답변은 3-4문장 이내로, 핵심만 전달해야 합니다.
+        2. **질문은 한 번에 하나씩만 하세요.** 예를 들어, "반려동물 종류는 무엇인가요?" 라고 묻고 사용자의 답변을 기다리세요.
+        3. 중요한 정보는 번호나 글머리 기호를 사용하세요.
+        4. 사용자의 반려동물 종류, 현재 체중, 목표 체중, 나이, 활동 수준, 현재 먹는 사료 종류와 양 등의 정보를 파악하세요.
+        5. 정보가 충분히 모이면, 주 단위의 점진적인 다이어트 계획을 구체적인 식단과 운동량으로 제안해주세요.
+        6. 특정 브랜드의 사료를 추천하기보다는, '저칼로리 처방식 사료', '습식 사료' 등 종류를 추천하고, 일일 권장 칼로리를 계산해주세요.
+        7. 모든 조언의 마지막에는 "이 계획은 일반적인 가이드라인이며, 실제 적용 전에는 반드시 담당 수의사와 상담하시기 바랍니다." 라는 주의 문구를 포함해주세요.
         """
 
         # DB에서 이전 대화 기록 불러오기
@@ -786,6 +787,28 @@ def ask_chatbot():
     finally:
         if conn:
             conn.close()
+
+@app.route('/chatbot/reset', methods=['POST'])
+@login_required
+def reset_chatbot():
+    """현재 사용자의 챗봇 대화 기록을 모두 삭제합니다."""
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor()
+            cur.execute("DELETE FROM chat_history WHERE user_id = %s", (current_user.id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            cur = conn.cursor()
+            cur.execute("DELETE FROM chat_history WHERE user_id = ?", (current_user.id,))
+        conn.commit()
+        flash('대화 내용이 초기화되었습니다.', 'success')
+    finally:
+        if conn:
+            conn.close()
+    return redirect(url_for('chatbot'))
 
 _db_initialized = False # DB 초기화 플래그
 @app.before_request
