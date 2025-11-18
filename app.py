@@ -688,7 +688,7 @@ def initialize_database():
 @app.errorhandler(500)
 def internal_error(error):
     print(f"500 Error: {error}")
-    return render_template('500.html'), 500
+    return "Internal Server Error", 500
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
