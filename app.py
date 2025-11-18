@@ -629,7 +629,8 @@ def obesity_check():
 @login_required
 def chatbot():
     """다이어트 플랜 챗봇 페이지를 렌더링합니다."""
-    return render_template('chatbot.html')
+    behavior_options = list(BEHAVIOR_DB.keys())
+    return render_template('chatbot.html', behaviors=behavior_options)
 
 @app.route('/ask_chatbot', methods=['POST'])
 @login_required
