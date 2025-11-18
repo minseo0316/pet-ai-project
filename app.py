@@ -385,12 +385,6 @@ def analyze():
         # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
         return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 500
 
-# --- 컨텍스트 프로세서: 모든 템플릿에서 사용할 변수 등록 ---
-@app.context_processor
-def inject_behaviors():
-    return dict(behaviors=list(BEHAVIOR_DB.keys()))
-
-# --- 사용자 인증 관련 라우트 ---
 @login_manager.user_loader
 def load_user(user_id):
     database_url = os.environ.get("DATABASE_URL")
@@ -414,6 +408,12 @@ def load_user(user_id):
         if conn:
             conn.close()
 
+# --- 컨텍스트 프로세서: 모든 템플릿에서 사용할 변수 등록 ---
+@app.context_processor
+def inject_behaviors():
+    return dict(behaviors=list(BEHAVIOR_DB.keys()))
+
+# --- 사용자 인증 관련 라우트 ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
