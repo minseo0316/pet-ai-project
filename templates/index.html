@@ -127,6 +127,13 @@
                 reader.readAsDataURL(file);
             }
         });
+
+        // 폼 제출 시 버튼 비활성화
+        document.querySelector('form[action="/analyze"]').addEventListener('submit', function() {
+            const button = this.querySelector('button[type="submit"]');
+            button.disabled = true;
+            button.innerHTML = `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 분석 중...`;
+        });
         </script>
 </body>
 </html>
