@@ -191,6 +191,20 @@ def run_db_setup():
             conn.commit()
             print("Postgres: analysis_history 테이블 생성 확인 완료.")
 
+            # 챗봇 대화 기록 테이블 생성
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    role TEXT NOT NULL, -- 'user' 또는 'model'
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            ''')
+            conn.commit()
+            print("Postgres: chat_history 테이블 생성 확인 완료.")
+
             cur.close()
             conn.close()
         except Exception as e:
@@ -241,6 +255,18 @@ def run_db_setup():
                 )
             ''')
             conn.commit()
+
+            # 챗봇 대화 기록 테이블 생성 (SQLite)
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS chat_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            ''')
 
             conn.close()
         except Exception as e:
@@ -564,13 +590,13 @@ def delete_user(user_id):
         if database_url:
             conn = psycopg2.connect(database_url)
             cur = conn.cursor()
-            # 관련 분석 기록 먼저 삭제
-            cur.execute("DELETE FROM analysis_history WHERE user_id = %s", (user_id,))
+            # users 테이블에서 삭제 시 chat_history와 analysis_history도 자동으로 삭제됨 (ON DELETE CASCADE)
             cur.execute("DELETE FROM users WHERE id = %s", (user_id,))
         else:
             conn = sqlite3.connect(DB_FILE)
             cur = conn.cursor()
-            cur.execute("DELETE FROM analysis_history WHERE user_id = ?", (user_id,))
+            # SQLite는 외래 키 제약조건을 활성화해야 CASCADE가 동작함
+            cur.execute("PRAGMA foreign_keys = ON")
             cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
         flash(f'사용자 ID {user_id}가 삭제되었습니다.', 'success')
@@ -672,7 +698,27 @@ def obesity_check():
 @login_required
 def chatbot():
     """다이어트 플랜 챗봇 페이지를 렌더링합니다."""
-    return render_template('chatbot.html')
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT role, content FROM chat_history WHERE user_id = %s ORDER BY created_at ASC", (current_user.id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT role, content FROM chat_history WHERE user_id = ? ORDER BY created_at ASC", (current_user.id,))
+        
+        history_records = cur.fetchall()
+        # Gemini API가 요구하는 형식으로 변환: [{'role': 'user', 'parts': ['...']}, {'role': 'model', 'parts': ['...']}]
+        chat_history = [{'role': record['role'], 'parts': [record['content']]} for record in history_records]
+
+        return render_template('chatbot.html', history=chat_history)
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/ask_chatbot', methods=['POST']) # 챗봇 API 라우트
 @login_required
@@ -680,8 +726,6 @@ def ask_chatbot():
     """챗봇의 질문에 답변하는 API 엔드포인트"""
     data = request.get_json()
     user_message = data.get('message')
-    # 클라이언트에서 대화 기록을 받아옴
-    history = data.get('history', [])
 
     if not user_message:
         return jsonify({'error': '메시지가 없습니다.'}), 400
@@ -690,14 +734,31 @@ def ask_chatbot():
         # 챗봇을 위한 시스템 프롬프트
         system_prompt = """
         당신은 반려동물 영양학 전문 수의사 AI 챗봇입니다. 당신의 임무는 사용자와의 대화를 통해 반려동물의 정보를 얻고, 이를 바탕으로 안전하고 현실적인 다이어트 계획을 제안하는 것입니다.
-
+        
         규칙:
-        1. 항상 친절하고 전문적인 톤을 유지하세요.
-        2. 사용자의 반려동물 종류(강아지/고양이), 현재 체중, 목표 체중, 나이, 활동 수준, 현재 먹는 사료 종류와 양 등의 정보를 먼저 질문하여 파악하세요.
-        3. 정보가 충분히 모이면, 주 단위의 점진적인 다이어트 계획을 구체적인 식단과 운동량으로 제안해주세요.
-        4. 특정 브랜드의 사료를 추천하기보다는, '저칼로리 처방식 사료', '습식 사료' 등 종류를 추천하고, 일일 권장 칼로리를 계산해주세요.
-        5. 모든 조언의 마지막에는 "이 계획은 일반적인 가이드라인이며, 실제 적용 전에는 반드시 담당 수의사와 상담하시기 바랍니다." 라는 주의 문구를 포함해주세요.
+        1. 답변은 항상 친절하고 간결하게, 핵심만 요약해서 전달하세요.
+        2. 중요한 정보는 번호나 글머리 기호를 사용하여 가독성을 높여주세요.
+        3. 사용자의 반려동물 종류(강아지/고양이), 현재 체중, 목표 체중, 나이, 활동 수준, 현재 먹는 사료 종류와 양 등의 정보를 먼저 질문하여 파악하세요.
+        4. 정보가 충분히 모이면, 주 단위의 점진적인 다이어트 계획을 구체적인 식단과 운동량으로 제안해주세요.
+        5. 특정 브랜드의 사료를 추천하기보다는, '저칼로리 처방식 사료', '습식 사료' 등 종류를 추천하고, 일일 권장 칼로리를 계산해주세요.
+        6. 모든 조언의 마지막에는 "이 계획은 일반적인 가이드라인이며, 실제 적용 전에는 반드시 담당 수의사와 상담하시기 바랍니다." 라는 주의 문구를 포함해주세요.
         """
+
+        # DB에서 이전 대화 기록 불러오기
+        database_url = os.environ.get("DATABASE_URL")
+        conn = None
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT role, content FROM chat_history WHERE user_id = %s ORDER BY created_at ASC", (current_user.id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT role, content FROM chat_history WHERE user_id = ? ORDER BY created_at ASC", (current_user.id,))
+        
+        history_records = cur.fetchall()
+        history = [{'role': record['role'], 'parts': [record['content']]} for record in history_records]
 
         # 모델 초기화 및 대화 시작
         model = genai.GenerativeModel(
@@ -706,8 +767,23 @@ def ask_chatbot():
         )
         chat = model.start_chat(history=history)
         response = chat.send_message(user_message)
+        model_response = response.text
 
-        return jsonify({'response': response.text})
+        # 사용자와 모델의 대화를 DB에 저장
+        if database_url:
+            cur.execute("INSERT INTO chat_history (user_id, role, content) VALUES (%s, %s, %s)", (current_user.id, 'user', user_message))
+            cur.execute("INSERT INTO chat_history (user_id, role, content) VALUES (%s, %s, %s)", (current_user.id, 'model', model_response))
+        else:
+            cur.execute("INSERT INTO chat_history (user_id, role, content) VALUES (?, ?, ?)", (current_user.id, 'user', user_message))
+            cur.execute("INSERT INTO chat_history (user_id, role, content) VALUES (?, ?, ?)", (current_user.id, 'model', model_response))
+        conn.commit()
+
+        # 클라이언트가 대화 기록을 업데이트할 수 있도록 방금 저장된 대화 내용을 반환
+        new_history_parts = [
+            {'role': 'user', 'parts': [user_message]},
+            {'role': 'model', 'parts': [model_response]}
+        ]
+        return jsonify({'new_history': new_history_parts})
 
     except Exception as e:
         print(f"챗봇 응답 생성 중 오류 발생: {e}")

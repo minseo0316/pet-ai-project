@@ -85,7 +85,18 @@
         const chatForm = document.getElementById('chat-form');
         const userInput = document.getElementById('user-input');
         const chatBox = document.getElementById('chat-box');
-        let conversationHistory = [];
+        // 서버에서 전달받은 history를 JavaScript 배열로 변환
+        let conversationHistory = {{ history | tojson | safe }};
+
+        // 페이지 로드 시 이전 대화 내용 표시
+        window.onload = function() {
+            chatBox.innerHTML = ''; // 초기 메시지 삭제
+            conversationHistory.forEach(turn => {
+                // 'parts'가 배열이므로 첫 번째 요소를 사용
+                addMessage(turn.role, turn.parts[0]);
+            });
+            userInput.focus();
+        };
 
         function addMessage(sender, message) {
             const messageDiv = document.createElement('div');
@@ -109,21 +120,30 @@
             userInput.value = '';
             userInput.disabled = true;
 
-            // 대화 기록에 사용자 메시지 추가
-            conversationHistory.push({ role: 'user', parts: [message] });
-
             try {
                 const response = await fetch('/ask_chatbot', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message, history: conversationHistory })
+                    // 서버는 DB에서 전체 히스토리를 다시 로드하므로, 여기서는 메시지만 보냅니다.
+                    body: JSON.stringify({ message: message })
                 });
 
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+
                 const data = await response.json();
-                addMessage('model', data.response);
+                if (data.error) {
+                    throw new Error(data.error);
+                }
                 
-                // 대화 기록에 모델 응답 추가
-                conversationHistory.push({ role: 'model', parts: [data.response] });
+                // 서버로부터 받은 새로운 대화 기록을 화면에 표시하고 배열에 추가
+                data.new_history.forEach(turn => {
+                    if (turn.role === 'model') { // AI 답변만 화면에 추가 (사용자 메시지는 이미 추가됨)
+                        addMessage(turn.role, turn.parts[0]);
+                    }
+                    conversationHistory.push(turn);
+                });
 
             } catch (error) {
                 console.error('Error:', error);
