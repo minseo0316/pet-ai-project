@@ -10,7 +10,52 @@ from PIL import Image
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import bcrypt
-from petai_utils import analyze_behaviors, assess_cat_obesity, assess_dog_obesity, BEHAVIOR_DB
+from petai_utils import analyze_behaviors, assess_cat_obesity, assess_dog_obesity
+
+
+# --- 이상행동 DB (petai_utils.py에서 이동) ---
+BEHAVIOR_DB = {
+    "과도한 핥기": {
+        "possible_causes": ["피부 알레르기", "스트레스", "기생충"],
+        "coaching": "피부 상태를 관찰하고, 국소적 염증이나 탈모가 있는지 확인하세요. 48시간 내 개선 없으면 수의사 방문을 권합니다. 스트레스 가능성도 고려해 환경 변화를 최소화하세요."
+    },
+    "식욕부진": {
+        "possible_causes": ["소화기 문제", "통증", "감염"],
+        "coaching": "24시간 이상 식사를 거부하면 즉시 수의사 상담이 필요합니다. 물 섭취량과 배변 상태를 함께 기록하세요."
+    },
+    "과도한 물어뜯기(깨무는 행동)": {
+        "possible_causes": ["통증", "스트레스", "구강 문제"],
+        "coaching": "입안 냄새, 잇몸 출혈, 침흘림 여부를 확인하세요. 통증 의심되면 동물병원에서 구강검진을 받으세요."
+    },
+    "숨기/은신 행동 증가": {
+        "possible_causes": ["스트레스", "병든 징후", "환경 변화"],
+        "coaching": "조용한 공간과 은신처를 제공하고 급격한 환경 변화를 줄이세요. 계속 숨거나 활동량이 크게 줄면 수의사 상담을 권합니다."
+    },
+    "과도한 배설/실내 배변": {
+        "possible_causes": ["의사소통 문제", "소화기 질환", "스트레스"],
+        "coaching": "배변 장소와 빈도를 기록하고, 변의 모양(혈액, 점액 등)을 확인하세요. 문제 지속 시 검진이 필요합니다."
+    },
+    "지속적 울음/야행성 소음": {
+        "possible_causes": ["통증", "인지 기능 저하(노령)", "스트레스"],
+        "coaching": "나이를 고려해 야간 행동 패턴을 점검하세요. 노령묘의 경우 인지기능 변화일 수 있으니 수의사 상담을 권합니다."
+    },
+    "비정상적 움직임(절뚝임 등)": {
+        "possible_causes": ["외상", "관절염", "근골격계 이상"],
+        "coaching": "움직임의 시작 시점과 악화 양상을 기록하세요. 통증 징후가 보이면 안정화 후 정밀검사 필요합니다."
+    },
+    "구토 빈발": {
+        "possible_causes": ["식이 문제", "중독", "위장관 질환"],
+        "coaching": "구토 횟수, 섭취한 음식, 혈액 혼합 여부를 기록하세요. 탈수 우려 시 즉시 수의사 방문이 필요합니다."
+    },
+    "설사": {
+        "possible_causes": ["감염", "식이 부적합", "기생충"],
+        "coaching": "수분 공급을 우선으로 하고 24-48시간 개선이 없으면 검진을 권합니다. 배변의 상태를 사진으로 기록해 두세요."
+    },
+    "과도한 긁기(발톱으로 긁음)": {
+        "possible_causes": ["피부병변", "알레르기", "기생충"],
+        "coaching": "피부의 발적, 비듬, 기생충 징후를 확인하세요. 국소 치료 후에도 지속되면 수의사 진료가 필요합니다."
+    }
+}
 
 
 # --- 1. Flask 앱 설정 ---
@@ -34,6 +79,29 @@ class User(UserMixin):
         self.id = id
         self.username = username
         self.is_admin = is_admin
+
+@login_manager.user_loader
+def load_user(user_id):
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        
+        user_data = cur.fetchone()
+        if user_data:
+            return User(id=user_data['id'], username=user_data['username'], is_admin=user_data['is_admin'])
+        return None
+    finally:
+        if conn:
+            conn.close()
 
 # --- 2. Gemini API 설정 ---
 try:
@@ -317,7 +385,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
 
         # --- 추가 분석 (이상행동, 비만) ---
         if selected_behaviors:
-            result_data['behavior_analysis'] = analyze_behaviors(selected_behaviors, symptom_text)
+            result_data['behavior_analysis'] = analyze_behaviors(selected_behaviors, symptom_text, BEHAVIOR_DB)
         
         return result_data
 
@@ -329,16 +397,20 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
 # --- 4. Flask 라우트(경로) 설정 ---
 @app.route('/')
 def index():
-    behavior_options = list(BEHAVIOR_DB.keys())
-    return render_template('index.html', behaviors=behavior_options)
+    return render_template('index.html') # 메인 페이지만을 렌더링합니다.
+
+@app.context_processor
+def inject_behaviors():
+    return dict(behaviors=list(BEHAVIOR_DB.keys()))
 
 @app.route('/analyze', methods=['POST'])
+@login_required
 def analyze():
     symptom_text = request.form.get('symptoms', '').strip()
     uploaded_file = request.files.get('image')
 
     if not symptom_text and not (uploaded_file and uploaded_file.filename != ''):
-        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다.", behaviors=list(BEHAVIOR_DB.keys())), 400
+        return render_template('index.html', error="사진 또는 증상 중 하나는 반드시 입력해야 합니다."), 400
 
     image_path_relative = None
     if uploaded_file and uploaded_file.filename != '':
@@ -352,7 +424,7 @@ def analyze():
             image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
         except Exception as e:
             print(f"이미지 처리 중 오류 발생: {e}")
-            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 400
+            return render_template('index.html', error=f"이미지 파일을 처리할 수 없습니다: {e}"), 400
 
     selected_behaviors = request.form.getlist('behaviors')
 
@@ -383,61 +455,9 @@ def analyze():
     except Exception as e:
         print(f"분석 처리 중 오류: {e}")
         # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
-        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}", behaviors=list(BEHAVIOR_DB.keys())), 500
+        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}"), 500
 
-# --- 사용자 인증 관련 라우트 ---
-@login_manager.user_loader
-def load_user(user_id):
-    database_url = os.environ.get("DATABASE_URL")
-    conn = None
-    try:
-        if database_url:
-            conn = psycopg2.connect(database_url)
-            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-            cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
-        else:
-            conn = sqlite3.connect(DB_FILE)
-            conn.row_factory = sqlite3.Row
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
-        
-        user_data = cur.fetchone()
-        if user_data:
-            return User(id=user_data['id'], username=user_data['username'], is_admin=user_data['is_admin'])
-        return None
-    finally:
-        if conn:
-            conn.close()
-
-@app.route('/register', methods=['GET', 'POST'])
-def register():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-        database_url = os.environ.get("DATABASE_URL")
-        conn = None
-        try:
-            if database_url:
-                conn = psycopg2.connect(database_url)
-                cur = conn.cursor()
-                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
-            else:
-                conn = sqlite3.connect(DB_FILE)
-                cur = conn.cursor()
-                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
-            conn.commit()
-            flash('회원가입이 완료되었습니다. 로그인해주세요.', 'success')
-            return redirect(url_for('login'))
-        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
-            flash('이미 존재하는 사용자 이름입니다.', 'danger')
-        finally:
-            if conn:
-                conn.close()
-    return render_template('register.html')
-
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['GET', 'POST']) # 로그인 라우트
 def login():
     if request.method == 'POST':
         username = request.form['username']
@@ -474,7 +494,35 @@ def logout():
     logout_user()
     return redirect(url_for('index'))
 
-@app.route('/admin')
+@app.route('/register', methods=['GET', 'POST']) # 회원가입 라우트
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        database_url = os.environ.get("DATABASE_URL")
+        conn = None
+        try:
+            if database_url:
+                conn = psycopg2.connect(database_url)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed_password))
+            else:
+                conn = sqlite3.connect(DB_FILE)
+                cur = conn.cursor()
+                cur.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, hashed_password))
+            conn.commit()
+            flash('회원가입이 완료되었습니다. 로그인해주세요.', 'success')
+            return redirect(url_for('login'))
+        except (sqlite3.IntegrityError, psycopg2.IntegrityError):
+            flash('이미 존재하는 사용자 이름입니다.', 'danger')
+        finally:
+            if conn:
+                conn.close()
+    return render_template('register.html')
+
+@app.route('/admin') # 관리자 페이지 라우트
 @login_required
 def admin():
     if not current_user.is_admin:
@@ -500,7 +548,7 @@ def admin():
         if conn:
             conn.close()
 
-@app.route('/admin/delete_user/<int:user_id>', methods=['POST'])
+@app.route('/admin/delete_user/<int:user_id>', methods=['POST']) # 사용자 삭제 라우트
 @login_required
 def delete_user(user_id):
     if not current_user.is_admin:
@@ -533,7 +581,7 @@ def delete_user(user_id):
             conn.close()
     return redirect(url_for('admin'))
 
-@app.route('/history/delete/<int:history_id>', methods=['POST'])
+@app.route('/history/delete/<int:history_id>', methods=['POST']) # 기록 삭제 라우트
 @login_required
 def delete_history(history_id):
     database_url = os.environ.get("DATABASE_URL")
@@ -562,7 +610,7 @@ def delete_history(history_id):
             conn.close()
     return redirect(url_for('history'))
 
-@app.route('/history')
+@app.route('/history') # 분석 기록 페이지 라우트
 @login_required
 def history():
     database_url = os.environ.get("DATABASE_URL")
@@ -598,13 +646,13 @@ def history():
         if conn:
             conn.close()
 
-@app.route('/mypage')
+@app.route('/mypage') # 마이페이지 라우트
 @login_required
 def mypage():
     """마이페이지 렌더링"""
     return render_template('mypage.html')
 
-@app.route('/obesity_check', methods=['GET', 'POST'])
+@app.route('/obesity_check', methods=['GET', 'POST']) # 비만도 체크 라우트
 @login_required
 def obesity_check():
     """비만도 체크 기능"""
@@ -620,13 +668,13 @@ def obesity_check():
         return render_template('obesity_check.html', result=result)
     return render_template('obesity_check.html', result=None)
 
-@app.route('/chatbot')
+@app.route('/chatbot') # 챗봇 페이지 라우트
 @login_required
 def chatbot():
     """다이어트 플랜 챗봇 페이지를 렌더링합니다."""
     return render_template('chatbot.html')
 
-@app.route('/ask_chatbot', methods=['POST'])
+@app.route('/ask_chatbot', methods=['POST']) # 챗봇 API 라우트
 @login_required
 def ask_chatbot():
     """챗봇의 질문에 답변하는 API 엔드포인트"""
@@ -665,7 +713,7 @@ def ask_chatbot():
         print(f"챗봇 응답 생성 중 오류 발생: {e}")
         return jsonify({'error': '죄송합니다. 답변을 생성하는 중 오류가 발생했습니다.'}), 500
 
-_db_initialized = False
+_db_initialized = False # DB 초기화 플래그
 @app.before_request
 def initialize_database():
     """앱이 첫 요청을 받기 전에 딱 한 번 DB를 초기화합니다."""
@@ -674,10 +722,10 @@ def initialize_database():
         run_db_setup()
         _db_initialized = True
 
-@app.errorhandler(500)
+@app.errorhandler(500) # 500 에러 핸들러
 def internal_error(error):
     print(f"500 Error: {error}")
-    return render_template('500.html'), 500
+    return "Internal Server Error", 500
 
 # --- 5. 앱 실행 ---
 if __name__ == '__main__':
