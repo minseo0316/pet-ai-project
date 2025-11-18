@@ -16,6 +16,7 @@
                     {% if current_user.is_admin %}
                         <a href="{{ url_for('admin') }}">관리자 페이지</a>
                     {% endif %}
+                    <a href="{{ url_for('history') }}">내 분석 기록</a>
                     <a href="{{ url_for('logout') }}">로그아웃</a>
                 </div>
             {% else %}

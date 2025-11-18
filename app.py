@@ -110,6 +110,19 @@ def run_db_setup():
                 conn.commit()
                 print("Postgres: 기본 관리자(admin) 계정 생성 완료.")
 
+            # 분석 기록 테이블 생성
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS analysis_history (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    analysis_result JSONB,
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            ''')
+            conn.commit()
+            print("Postgres: analysis_history 테이블 생성 확인 완료.")
+
             cur.close()
             conn.close()
         except Exception as e:
@@ -148,6 +161,18 @@ def run_db_setup():
                 hashed_password = bcrypt.hashpw('admin'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                 cur.execute("INSERT INTO users (username, password, is_admin) VALUES (?, ?, ?)", ('admin', hashed_password, True))
                 conn.commit()
+
+            # 분석 기록 테이블 생성 (SQLite)
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS analysis_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    analysis_result TEXT, -- JSON을 텍스트로 저장
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            ''')
+            conn.commit()
 
             conn.close()
         except Exception as e:
@@ -256,6 +281,14 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         # --- Gemini 모델 초기화 ---
         model = genai.GenerativeModel('models/gemini-2.5-flash')
 
+        # --- 신뢰도 평가 프롬프트 추가 ---
+        confidence_prompt = """
+        [신뢰도 평가]
+        지금까지의 정보를 바탕으로, 당신의 최종 진단에 대한 신뢰도를 '높음', '중간', '낮음' 중 하나로 평가하고 그 이유를 한 문장으로 설명해주세요.
+        신뢰도: [높음/중간/낮음]
+        이유: [이유]
+        """
+
         if 'image_analysis_label' in result_data:
             prompt_contexts.append(f"[사진 분석 결과 라벨]\n{result_data['image_analysis_label']}")
 
@@ -273,11 +306,12 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         [규칙] 
         [출력 형식]
         ### 핵심 요약
-        (모든 내용을 한두 문장으로 요약)
+        (모든 내용을 한두 문장으로 요약)\n
         ### 상세 설명
-        (의심되는 점과 그 이유를 자세히 설명)
+        (의심되는 점과 그 이유를 자세히 설명)\n
         ### 권장 조치
-        (보호자가 해야 할 일, 예를 들어 병원 방문 권유 등)
+        (보호자가 해야 할 일, 예를 들어 병원 방문 권유 등)\n
+        {confidence_prompt}
         '''
         response = model.generate_content(prompt)
         # Gemini가 생성한 마크다운 텍스트를 HTML로 변환
@@ -332,8 +366,27 @@ def analyze():
     # 동기식으로 분석을 직접 수행하고 결과를 바로 렌더링합니다.
     try:
         result_data = run_analysis_task(dict(request.form), image_path_relative, selected_behaviors)
-        # 분석이 끝나면 바로 결과 페이지를 보여줍니다.
-        return render_template('results.html', result=result_data, behaviors=list(BEHAVIOR_DB.keys()))
+
+        # 로그인한 사용자의 경우, 분석 결과를 DB에 저장
+        if current_user.is_authenticated:
+            import json
+            database_url = os.environ.get("DATABASE_URL")
+            conn = None
+            try:
+                if database_url:
+                    conn = psycopg2.connect(database_url)
+                    cur = conn.cursor()
+                    cur.execute("INSERT INTO analysis_history (user_id, analysis_result) VALUES (%s, %s)", (current_user.id, json.dumps(result_data)))
+                else:
+                    conn = sqlite3.connect(DB_FILE)
+                    cur = conn.cursor()
+                    cur.execute("INSERT INTO analysis_history (user_id, analysis_result) VALUES (?, ?)", (current_user.id, json.dumps(result_data)))
+                conn.commit()
+            finally:
+                if conn:
+                    conn.close()
+
+        return render_template('results.html', result=result_data)
     except Exception as e:
         print(f"분석 처리 중 오류: {e}")
         # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
@@ -450,6 +503,37 @@ def admin():
         
         users = cur.fetchall()
         return render_template('admin.html', users=users)
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/history')
+@login_required
+def history():
+    database_url = os.environ.get("DATABASE_URL")
+    conn = None
+    try:
+        if database_url:
+            conn = psycopg2.connect(database_url)
+            cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cur.execute("SELECT * FROM analysis_history WHERE user_id = %s ORDER BY created_at DESC", (current_user.id,))
+        else:
+            conn = sqlite3.connect(DB_FILE)
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            cur.execute("SELECT * FROM analysis_history WHERE user_id = ? ORDER BY created_at DESC", (current_user.id,))
+        
+        history_records = cur.fetchall()
+        
+        # JSON 텍스트를 파이썬 딕셔너리로 변환
+        import json
+        processed_history = []
+        for record in history_records:
+            processed_record = dict(record)
+            processed_record['analysis_result'] = json.loads(processed_record['analysis_result'])
+            processed_history.append(processed_record)
+            
+        return render_template('history.html', history=processed_history)
     finally:
         if conn:
             conn.close()
