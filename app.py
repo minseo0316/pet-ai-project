@@ -778,16 +778,14 @@ def ask_chatbot():
             cur.execute("INSERT INTO chat_history (user_id, role, content) VALUES (?, ?, ?)", (current_user.id, 'model', model_response))
         conn.commit()
 
-        # 클라이언트가 대화 기록을 업데이트할 수 있도록 방금 저장된 대화 내용을 반환
-        new_history_parts = [
-            {'role': 'user', 'parts': [user_message]},
-            {'role': 'model', 'parts': [model_response]}
-        ]
-        return jsonify({'new_history': new_history_parts})
+        return jsonify({'response': model_response})
 
     except Exception as e:
         print(f"챗봇 응답 생성 중 오류 발생: {e}")
         return jsonify({'error': '죄송합니다. 답변을 생성하는 중 오류가 발생했습니다.'}), 500
+    finally:
+        if conn:
+            conn.close()
 
 _db_initialized = False # DB 초기화 플래그
 @app.before_request

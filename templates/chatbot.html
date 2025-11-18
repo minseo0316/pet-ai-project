@@ -86,7 +86,7 @@
         const userInput = document.getElementById('user-input');
         const chatBox = document.getElementById('chat-box');
         // 서버에서 전달받은 history를 JavaScript 배열로 변환
-        let conversationHistory = {{ history | tojson | safe }};
+        let conversationHistory = {{ history|tojson|safe }} || [];
 
         // 페이지 로드 시 이전 대화 내용 표시
         window.onload = function() {
@@ -124,26 +124,20 @@
                 const response = await fetch('/ask_chatbot', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // 서버는 DB에서 전체 히스토리를 다시 로드하므로, 여기서는 메시지만 보냅니다.
+                    // 서버는 DB에서 전체 히스토리를 다시 로드하므로, 여기서는 현재 메시지만 보냅니다.
                     body: JSON.stringify({ message: message })
                 });
 
                 if (!response.ok) {
                     throw new Error(`Server error: ${response.statusText}`);
                 }
-
                 const data = await response.json();
                 if (data.error) {
                     throw new Error(data.error);
                 }
-                
-                // 서버로부터 받은 새로운 대화 기록을 화면에 표시하고 배열에 추가
-                data.new_history.forEach(turn => {
-                    if (turn.role === 'model') { // AI 답변만 화면에 추가 (사용자 메시지는 이미 추가됨)
-                        addMessage(turn.role, turn.parts[0]);
-                    }
-                    conversationHistory.push(turn);
-                });
+
+                // 서버로부터 받은 AI 답변을 화면에 표시
+                addMessage('model', data.response);
 
             } catch (error) {
                 console.error('Error:', error);
