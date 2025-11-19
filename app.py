@@ -282,7 +282,7 @@ def analyze_image(image_path):
     try:
         image_file = genai.upload_file(path=image_path)
         print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
+        model = genai.GenerativeModel('models/gemini-pro-vision')
         prompt = """
         당신은 수의학 지식이 있는 AI 보조원입니다.
         이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
@@ -364,14 +364,20 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         if symptom_text:
             result_data['symptom_text'] = symptom_text
             prompt_contexts.append(f"[보호자 관찰 내용]\n{symptom_text}")
+        
+        # --- 이상 행동 처리 (이상 행동이 있는 경우) ---
+        if selected_behaviors:
+            behavior_text = ", ".join(selected_behaviors)
+            result_data['selected_behaviors'] = behavior_text
+            prompt_contexts.append(f"[보호자가 선택한 이상 행동]\n{behavior_text}")
 
         mission = "" # mission 변수 초기화
         if symptom_text and image_path_relative:
             mission = "위의 [사진 분석과 관련된 수의학 지식]을 바탕으로, [보호자 관찰 내용]과 [사진 분석 결과 라벨]을 종합하여" 
         elif image_path_relative:
             mission = "위의 [사진 분석과 관련된 수의학 지식]과 [사진 분석 결과 라벨]을 바탕으로,"
-        else: # symptom_text only
-            mission = "[보호자 관찰 내용]을 바탕으로,"
+        else: # 증상 텍스트 또는 이상 행동만 있는 경우
+            mission = "제공된 [보호자 관찰 내용]과 [보호자가 선택한 이상 행동]을 바탕으로,"
 
         # --- Gemini 모델 초기화 ---
         model = genai.GenerativeModel('models/gemini-2.5-flash')
