@@ -492,11 +492,12 @@ def analyze():
     if uploaded_file and uploaded_file.filename != '':
         try:
             image = Image.open(uploaded_file.stream)
-            original_filename = secure_filename(uploaded_file.filename)
-            filename_stem = os.path.splitext(original_filename)[0]
-            new_filename = f"{filename_stem}.png"
+            # 겹치지 않는 고유한 파일 이름 생성 (사용자ID_타임스탬프.png)
+            import time
+            unique_filename = f"{current_user.id}_{int(time.time())}"
+            new_filename = f"{unique_filename}.png"
             image_path_full = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
-            image.save(image_path_full, 'PNG')
+            image.save(image_path_full, 'PNG') # 모든 이미지를 PNG로 통일하여 저장
             image_path_relative = os.path.join(os.path.basename(app.config['UPLOAD_FOLDER']), new_filename).replace('\\', '/')
         except Exception as e:
             print(f"이미지 처리 중 오류 발생: {e}")
