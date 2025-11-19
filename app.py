@@ -387,7 +387,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             prompt_contexts.append(f"[사진 분석 결과 라벨]\n{result_data['image_analysis_label']}")
 
         prompt = f'''
-        당신은 전문 {pet_type} 수의사 AI 조수입니다. {", ".join(prompt_contexts)}
+        당신은 전문 {pet_type} 수의사 AI 조수입니다. {"\n\n".join(prompt_contexts)}
 
 
         ---
