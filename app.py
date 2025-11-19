@@ -301,7 +301,7 @@ def analyze_image(image_path):
         return response.text.strip()
     except Exception as e:
         print(f"이미지 분석 중 오류 발생: {e}")
-        return "이미지 분석 실패"
+        return f"이미지 분석 실패: {e}"
 
 def search_db_by_image_label(image_label):
     """이미지 라벨을 기반으로 데이터베이스에서 관련 질병을 검색합니다."""
