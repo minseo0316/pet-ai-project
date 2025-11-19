@@ -282,7 +282,7 @@ def analyze_image(image_path):
     try:
         image_file = genai.upload_file(path=image_path)
         print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        model = genai.GenerativeModel('models/gemini-2.5-pro')
         prompt = """
         당신은 수의학 지식이 있는 AI 보조원입니다.
         이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
@@ -374,7 +374,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             mission = "[보호자 관찰 내용]을 바탕으로,"
 
         # --- Gemini 모델 초기화 ---
-        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        model = genai.GenerativeModel('models/gemini-2.5-pro')
 
         # --- 신뢰도 평가 프롬프트 추가 ---
         confidence_prompt = """
@@ -805,7 +805,7 @@ def ask_chatbot():
 
         # 모델 초기화 및 대화 시작
         model = genai.GenerativeModel(
-            'models/gemini-1.5-flash',
+            'models/gemini-2.5-pro',
             system_instruction=system_prompt
         )
         chat = model.start_chat(history=history)
