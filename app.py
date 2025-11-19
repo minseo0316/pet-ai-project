@@ -295,7 +295,7 @@ def analyze_image(image_path):
             print('... 파일 처리 중 ...')
             image_file = genai.get_file(image_file.name) # 파일의 최신 상태를 가져옵니다.
 
-        response = model.generate_content([prompt, image_file])
+        response = model.generate_content([prompt, image_file], request_options={'timeout': 60})
         print(f"INFO: Image analysis result: {response.text.strip()}")
         genai.delete_file(image_file.name) # 분석이 끝난 후 파일을 삭제합니다.
         return response.text.strip()
@@ -420,8 +420,8 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         [경고 수준]
         (위 분석 결과에 가장 적합한 경고 수준을 다음 네 가지 중 하나만 선택하여 표시: "안전 🟢", "주의 🟡", "경고 🔴", "상담 필요 🔵")
 
-        '''
-        response = model.generate_content(prompt)
+        '''        
+        response = model.generate_content(prompt, request_options={'timeout': 60})
         raw_text = response.text
 
         # 신뢰도 부분 파싱
@@ -818,7 +818,7 @@ def ask_chatbot():
             system_instruction=system_prompt
         )
         chat = model.start_chat(history=history)
-        response = chat.send_message(user_message)
+        response = chat.send_message(user_message, request_options={'timeout': 60})
         model_response = response.text
 
         # 사용자와 모델의 대화를 DB에 저장
