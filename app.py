@@ -383,7 +383,13 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             mission = "제공된 정보를 바탕으로"
 
         # --- Gemini 모델 초기화 ---
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
+        # 강아지 분석 시 gemini-2.5-flash가 불안정한 것으로 보이므로,
+        # 강아지일 경우 더 안정적인 gemini-1.0-pro를 사용합니다.
+        # 고양이일 경우 요청하신 gemini-2.5-flash를 사용합니다.
+        if pet_type == '강아지':
+            model = genai.GenerativeModel('models/gemini-1.0-pro')
+        else: # 고양이
+            model = genai.GenerativeModel('models/gemini-2.5-flash')
 
         # --- 신뢰도 평가 프롬프트 추가 ---
         confidence_prompt = """
