@@ -280,25 +280,24 @@ def run_db_setup():
 def analyze_image(image_path):
     """실제 Gemini Vision 모델을 사용하여 이미지를 분석하고 라벨을 반환합니다."""
     try:
-        print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
         image_file = genai.upload_file(path=image_path)
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
-        prompt = """
-        당신은 수의학 지식이 있는 AI 보조원입니다.
-        이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
-        눈, 코, 입, 귀, 피부, 털 상태, 자세 등 구체적인 부위에 집중해서 설명해주세요.
-        만약 여러 증상이 보인다면 모두 나열해주세요. (예: 왼쪽 눈의 탁한 분비물, 코 주변의 약간의 붉은 기, 가슴 부분의 뭉친 털)
-        만약 특별한 이상 징후 없이 건강해 보인다면 '외관상 특이 소견 없음' 이라고 답변해주세요.
-        """
-        response = model.generate_content([prompt, image_file])
-        
-        # 응답 후 파일 상태 확인 및 삭제
-        while image_file.state.name == "PROCESSING":
-            print('... Still processing file')
-            image_file.get_file()
-        genai.delete_file(image_file.name)
-        print(f"INFO: Image analysis result: {response.text.strip()}")
-        return response.text.strip()
+        try:
+            print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
+            model = genai.GenerativeModel('models/gemini-1.5-flash')
+            prompt = """
+            당신은 수의학 지식이 있는 AI 보조원입니다.
+            이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
+            눈, 코, 입, 귀, 피부, 털 상태, 자세 등 구체적인 부위에 집중해서 설명해주세요.
+            만약 여러 증상이 보인다면 모두 나열해주세요. (예: 왼쪽 눈의 탁한 분비물, 코 주변의 약간의 붉은 기, 가슴 부분의 뭉친 털)
+            만약 특별한 이상 징후 없이 건강해 보인다면 '외관상 특이 소견 없음' 이라고 답변해주세요.
+            """
+            response = model.generate_content([prompt, image_file])
+            print(f"INFO: Image analysis result: {response.text.strip()}")
+            return response.text.strip()
+        finally:
+            # 분석이 성공하든 실패하든, 업로드된 임시 파일은 항상 삭제합니다.
+            print(f"INFO: Deleting temporary file from server: {image_file.name}")
+            genai.delete_file(image_file.name)
     except Exception as e:
         print(f"이미지 분석 중 오류 발생: {e}")
         return "이미지 분석 실패"
