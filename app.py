@@ -188,7 +188,7 @@ def run_db_setup():
                     user_id INTEGER NOT NULL,
                     analysis_result JSONB,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (id)
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             ''')
             conn.commit()
@@ -254,7 +254,7 @@ def run_db_setup():
                     user_id INTEGER NOT NULL,
                     analysis_result TEXT, -- JSON을 텍스트로 저장
                     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (user_id) REFERENCES users (id)
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             ''')
             conn.commit()
