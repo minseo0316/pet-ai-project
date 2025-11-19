@@ -81,6 +81,13 @@
                 <strong>오류 발생:</strong> {{ result.error }}
             </div>
         {% else %}
+            {% if result.image_path %}
+            <div class="analysis-section">
+                <h4>분석한 이미지</h4>
+                <img src="{{ url_for('static', filename=result.image_path) }}" class="img-fluid rounded" alt="분석 이미지">
+            </div>
+            {% endif %}
+
             <!-- 경고 수준에 따라 클래스 동적 적용 -->
             <div class="result-card shadow-sm mb-4 {{ result.warning_level | default('caution') }}">
                 {{ result.gemini_response | safe }}
@@ -97,13 +104,6 @@
                 </div>
                 {% endif %}
             </div>
-        {% endif %}
-
-        {% if result.image_path %}
-        <div class="analysis-section">
-            <h4>분석한 이미지</h4>
-            <img src="{{ url_for('static', filename=result.image_path) }}" class="img-fluid rounded" alt="분석 이미지">
-        </div>
         {% endif %}
 
         <div class="text-center mt-4">
