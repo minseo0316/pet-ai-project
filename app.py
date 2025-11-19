@@ -281,23 +281,24 @@ def analyze_image(image_path):
     """실제 Gemini Vision 모델을 사용하여 이미지를 분석하고 라벨을 반환합니다."""
     try:
         image_file = genai.upload_file(path=image_path)
-        try:
-            print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
-            model = genai.GenerativeModel('models/gemini-pro-vision')
-            prompt = """
-            당신은 수의학 지식이 있는 AI 보조원입니다.
-            이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
-            눈, 코, 입, 귀, 피부, 털 상태, 자세 등 구체적인 부위에 집중해서 설명해주세요.
-            만약 여러 증상이 보인다면 모두 나열해주세요. (예: 왼쪽 눈의 탁한 분비물, 코 주변의 약간의 붉은 기, 가슴 부분의 뭉친 털)
-            만약 특별한 이상 징후 없이 건강해 보인다면 '외관상 특이 소견 없음' 이라고 답변해주세요.
-            """
-            response = model.generate_content([prompt, image_file])
-            print(f"INFO: Image analysis result: {response.text.strip()}")
-            return response.text.strip()
-        finally:
-            # 분석이 성공하든 실패하든, 업로드된 임시 파일은 항상 삭제합니다.
-            print(f"INFO: Deleting temporary file from server: {image_file.name}")
-            genai.delete_file(image_file.name)
+        print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        prompt = """
+        당신은 수의학 지식이 있는 AI 보조원입니다.
+        이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
+        눈, 코, 입, 귀, 피부, 털 상태, 자세 등 구체적인 부위에 집중해서 설명해주세요.
+        만약 여러 증상이 보인다면 모두 나열해주세요. (예: 왼쪽 눈의 탁한 분비물, 코 주변의 약간의 붉은 기, 가슴 부분의 뭉친 털)
+        만약 특별한 이상 징후 없이 건강해 보인다면 '외관상 특이 소견 없음' 이라고 답변해주세요."""
+
+        # 파일이 처리될 때까지 기다립니다.
+        while image_file.state.name == "PROCESSING":
+            print('... 파일 처리 중 ...')
+            image_file = genai.get_file(image_file.name) # 파일의 최신 상태를 가져옵니다.
+
+        response = model.generate_content([prompt, image_file])
+        print(f"INFO: Image analysis result: {response.text.strip()}")
+        genai.delete_file(image_file.name) # 분석이 끝난 후 파일을 삭제합니다.
+        return response.text.strip()
     except Exception as e:
         print(f"이미지 분석 중 오류 발생: {e}")
         return "이미지 분석 실패"
@@ -373,7 +374,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             mission = "[보호자 관찰 내용]을 바탕으로,"
 
         # --- Gemini 모델 초기화 ---
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
 
         # --- 신뢰도 평가 프롬프트 추가 ---
         confidence_prompt = """
@@ -804,7 +805,7 @@ def ask_chatbot():
 
         # 모델 초기화 및 대화 시작
         model = genai.GenerativeModel(
-            'models/gemini-2.5-flash',
+            'models/gemini-1.5-flash',
             system_instruction=system_prompt
         )
         chat = model.start_chat(history=history)
