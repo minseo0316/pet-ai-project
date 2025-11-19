@@ -283,7 +283,7 @@ def analyze_image(image_path):
         image_file = genai.upload_file(path=image_path)
         try:
             print(f"INFO: Analyzing image at {image_path} with Gemini Vision...")
-            model = genai.GenerativeModel('models/gemini-1.5-flash')
+            model = genai.GenerativeModel('models/gemini-pro-vision')
             prompt = """
             당신은 수의학 지식이 있는 AI 보조원입니다.
             이 반려동물 사진에서 관찰할 수 있는 모든 잠재적인 의학적 증상을 자세히 묘사해주세요.
