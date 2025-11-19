@@ -465,7 +465,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
     except Exception as e:
         print(f"분석 중 오류 발생: {e}")
         # 오류 발생 시 오류 정보를 담은 딕셔너리 반환
-        return {"error": f"분석 중 오류가 발생했습니다: {e}"}
+        return {"error": f"AI 분석 작업 중 오류가 발생했습니다: {e}"}
 
 # --- 4. Flask 라우트(경로) 설정 ---
 @app.route('/')
@@ -527,8 +527,8 @@ def analyze():
         return render_template('results.html', result=result_data)
     except Exception as e:
         print(f"분석 처리 중 오류: {e}")
-        # 오류 발생 시, 에러 메시지와 함께 메인 페이지로 돌아갑니다.
-        return render_template('index.html', error=f"분석 처리 중 오류가 발생했습니다: {e}"), 500
+        # 오류 발생 시, results.html 페이지에 오류 내용을 직접 표시합니다.
+        return render_template('results.html', result={"error": f"서버 처리 중 오류가 발생했습니다: {e}"})
 
 @app.route('/login', methods=['GET', 'POST']) # 로그인 라우트
 def login():
