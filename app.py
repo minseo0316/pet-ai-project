@@ -371,13 +371,16 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             result_data['selected_behaviors'] = behavior_text
             prompt_contexts.append(f"[보호자가 선택한 이상 행동]\n{behavior_text}")
 
-        mission = "" # mission 변수 초기화
-        if symptom_text and image_path_relative:
-            mission = "위의 [사진 분석과 관련된 수의학 지식]을 바탕으로, [보호자 관찰 내용]과 [사진 분석 결과 라벨]을 종합하여" 
+        # mission 설정 로직을 모든 경우의 수를 명확히 하도록 수정
+        if image_path_relative and (symptom_text or selected_behaviors):
+            mission = "위의 [사진 분석과 관련된 수의학 지식]을 바탕으로, 제공된 [보호자 관찰 내용], [보호자가 선택한 이상 행동], [사진 분석 결과 라벨]을 종합하여"
         elif image_path_relative:
             mission = "위의 [사진 분석과 관련된 수의학 지식]과 [사진 분석 결과 라벨]을 바탕으로,"
-        else: # 증상 텍스트 또는 이상 행동만 있는 경우
+        elif symptom_text or selected_behaviors:
             mission = "제공된 [보호자 관찰 내용]과 [보호자가 선택한 이상 행동]을 바탕으로,"
+        else:
+            # 이 경우는 거의 없지만, 안전장치로 추가
+            mission = "제공된 정보를 바탕으로"
 
         # --- Gemini 모델 초기화 ---
         model = genai.GenerativeModel('models/gemini-2.5-flash')
