@@ -103,9 +103,6 @@
         <div class="analysis-section">
             <h4>분석한 이미지</h4>
             <img src="{{ url_for('static', filename=result.image_path) }}" class="img-fluid rounded" alt="분석 이미지">
-            {% if result.image_analysis_label %}
-                <p class="mt-2"><strong>AI가 인식한 이미지 내용:</strong> {{ result.image_analysis_label }}</p>
-            {% endif %}
         </div>
         {% endif %}
 
