@@ -383,7 +383,7 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
             mission = "제공된 정보를 바탕으로"
 
         # --- Gemini 모델 초기화 ---
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
+        model = genai.GenerativeModel('models/gemini-1.0-pro')
 
         # --- 신뢰도 평가 프롬프트 추가 ---
         confidence_prompt = """
@@ -814,7 +814,7 @@ def ask_chatbot():
 
         # 모델 초기화 및 대화 시작
         model = genai.GenerativeModel(
-            'models/gemini-2.5-flash',
+            'models/gemini-1.0-pro',
             system_instruction=system_prompt
         )
         chat = model.start_chat(history=history)
