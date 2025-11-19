@@ -53,9 +53,6 @@
                     {% if result.image_path %}
                         <div class="flex-shrink-0 text-center" style="width: 200px;">
                             <img src="{{ url_for('static', filename=result.image_path) }}" class="img-fluid rounded" alt="분석 이미지">
-                             {% if result.image_analysis_label %}
-                                <small class="text-muted d-block mt-2">"{{ result.image_analysis_label }}"</small>
-                            {% endif %}
                         </div>
                     {% endif %}
                     <div class="flex-grow-1 gemini-response">
