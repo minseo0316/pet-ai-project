@@ -54,6 +54,41 @@
             <p>AI와 함께 반려동물의 건강 상태를 점검해보세요</p>
         </header>
 
+        <div class="card mb-4 shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title text-center mb-4">💡 Pet.AI 사용 가이드</h5>
+                <div class="row text-center">
+                    <div class="col-md-4">
+                        <div class="step">
+                            <div class="step-icon mb-2">
+                                <i class="fa-solid fa-keyboard fa-2x text-primary"></i>
+                            </div>
+                            <h6>1. 정보 입력</h6>
+                            <p class="text-muted small">반려동물의 사진, 증상, 이상 행동을 자세히 입력해주세요.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="step">
+                            <div class="step-icon mb-2">
+                                <i class="fa-solid fa-robot fa-2x text-primary"></i>
+                            </div>
+                            <h6>2. AI 분석</h6>
+                            <p class="text-muted small">AI가 입력된 정보를 바탕으로 의심되는 질병과 조언을 생성합니다.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="step">
+                            <div class="step-icon mb-2">
+                                <i class="fa-solid fa-notes-medical fa-2x text-primary"></i>
+                            </div>
+                            <h6>3. 결과 확인</h6>
+                            <p class="text-muted small">분석 결과는 참고용이며, 정확한 진단은 반드시 수의사와 상담하세요.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -65,7 +100,7 @@
             {% endif %}
         {% endwith %}
 
-        <div class="card">
+        <div class="card shadow-sm">
             <div class="card-header">분석 정보 입력</div>
             <div class="card-body">
                 <form action="/analyze" method="post" enctype="multipart/form-data">
@@ -79,18 +114,18 @@
                         </div>
                     </div>
 
-                    <div class="form-group">
+                    <div class="form-group mt-3">
                         <label for="image">사진 업로드 (선택)</label>
                         <input type="file" class="form-control" id="image" name="image" accept="image/*">
                         <div id="image-preview-container" class="mt-2" style="display:none;">
                             <img id="image-preview" src="#" alt="Image preview" style="max-width: 100%; max-height: 200px; border-radius: 8px;"/>
                         </div>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group mt-3">
                         <label for="symptoms">증상 설명 (선택)</label>
                         <textarea class="form-control" id="symptoms" name="symptoms" rows="4" placeholder="예: 최근 눈을 자주 찡그리고 눈물이 많아졌어요."></textarea>
                     </div>
-                    <div class="form-group">
+                    <div class="form-group mt-3">
                         <label>이상 행동 (다중 선택 가능)</label>
                         <div class="behavior-checkboxes">
                             {% for behavior in behaviors %}
@@ -109,6 +144,10 @@
                 {% endif %}
             </div>
         </div>
+
+        <footer class="text-center text-muted py-4">
+            <small>&copy; 2024 Pet.AI. 모든 분석 결과는 참고용입니다.</small>
+        </footer>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

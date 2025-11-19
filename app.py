@@ -121,7 +121,10 @@ diseases_data = [
     ("결막염 (의심)", "붉은 눈,눈곱,눈물", "눈을 찡그림,눈 주변을 비빔", "주의 🟡", "눈이 붉어지고 눈곱이 끼는 증상은 '결막염'일 수 있습니다. 세균 감염이나 알레르기 때문일 수 있으니, 병원에서 안약을 처방받아 치료하는 것이 좋습니다."),
     ("정상 피부", "정상 피부", "특별한 증상 없음", "안전 🟢", "사진과 증상으로는 특별한 이상 징후가 보이지 않습니다. 건강한 상태로 보입니다. 하지만 평소와 다른 행동을 보인다면 주의 깊게 관찰해주세요."),
     ("고양이 허피스 바이러스 (상부 호흡기 감염)", "눈곱,콧물,재채기,눈 부음", "재채기,콧물,눈물,식욕부진", "주의 🟡", "고양이 허피스 바이러스는 상부 호흡기 감염(고양이 감기)의 주요 원인입니다. 전염성이 매우 강하므로 다른 고양이와 격리하고, 습도를 높여주어 호흡을 편안하게 해주세요. 증상이 심하거나 2-3일 내에 개선되지 않으면 즉시 병원을 방문하여 항바이러스 치료를 받는 것이 중요합니다."),
-    ("슬개골 탈구 (강아지)", "다리를 절음,깽깽이걸음,다리를 들고 뜀", "깽깽이걸음,다리를 절음,무릎에서 소리가 남", "경고 🔴", "깽깽이걸음이나 다리를 저는 증상은 슬개골 탈구의 대표적인 증상입니다. 특히 소형견에게 흔하게 발생합니다. 방치할 경우 관절염으로 악화될 수 있으니, 정형외과 전문 동물병원에서 정확한 단계를 진단받고 수술 여부를 상담하는 것이 좋습니다.")
+    ("슬개골 탈구 (강아지)", "다리를 절음,깽깽이걸음,다리를 들고 뜀", "깽깽이걸음,다리를 절음,무릎에서 소리가 남", "경고 🔴", "깽깽이걸음이나 다리를 저는 증상은 슬개골 탈구의 대표적인 증상입니다. 특히 소형견에게 흔하게 발생합니다. 방치할 경우 관절염으로 악화될 수 있으니, 정형외과 전문 동물병원에서 정확한 단계를 진단받고 수술 여부를 상담하는 것이 좋습니다."),
+    ("강아지 아토피성 피부염 (의심)", "피부 발적,탈모,두드러기,피부 핥음", "심한 가려움,발 핥기,귀 감염,피부 붉어짐", "주의 🟡", "사진과 증상으로 볼 때 '강아지 아토피성 피부염'이 의심됩니다. 알레르기 반응의 일종으로, 환경적 요인(꽃가루, 집먼지 진드기 등)에 의해 발생할 수 있습니다. 정확한 원인 파악과 관리를 위해 동물병원 방문을 권장합니다."),
+    ("개선충증 (옴, 의심)", "심한 각질,피부 딱지,탈모,피부 상처", "극심한 가려움(특히 밤에),귀 끝과 팔꿈치 병변,전염성", "경고 🔴", "극심한 가려움과 피부 딱지는 전염성이 매우 강한 '개선충증(옴)'의 특징일 수 있습니다. 즉시 다른 동물과 격리하고 동물병원에 방문하여 정확한 진단과 치료를 받아야 합니다. 사람에게도 옮을 수 있으니 주의가 필요합니다."),
+    ("곰팡이성 피부염 (링웜, 의심)", "원형 탈모,각질,붉은 테두리", "원형의 탈모반,가려움(경미하거나 없음),부서지는 털", "주의 🟡", "원형 탈모와 각질은 '곰팡이성 피부염(링웜)'의 대표적인 증상입니다. 전염성이 있으므로 다른 동물 및 사람과의 접촉을 피하고, 소독과 함께 동물병원에서 항진균제 치료를 받아야 합니다.")
 ]
 
 def run_db_setup():
@@ -404,6 +407,10 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         ### 권장 조치
         (보호자가 해야 할 일, 예를 들어 병원 방문 권유 등)\n
         {confidence_prompt}
+        ---
+        [경고 수준]
+        (위 분석 결과에 가장 적합한 경고 수준을 다음 네 가지 중 하나만 선택하여 표시: "안전 🟢", "주의 🟡", "경고 🔴", "상담 필요 🔵")
+
         '''
         response = model.generate_content(prompt)
         raw_text = response.text
@@ -411,11 +418,11 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         # 신뢰도 부분 파싱
         try:
             # '[신뢰도 평가]' 섹션을 기준으로 텍스트 분리
-            main_response_text, confidence_section = raw_text.split('[신뢰도 평가]', 1)
+            main_response_text, rest_of_text = raw_text.split('[신뢰도 평가]', 1)
             
             # 신뢰도 점수와 이유 추출
-            score_line = [line for line in confidence_section.split('\n') if '신뢰도:' in line][0]
-            reason_line = [line for line in confidence_section.split('\n') if '이유:' in line][0]
+            score_line = [line for line in rest_of_text.split('\n') if '신뢰도:' in line][0]
+            reason_line = [line for line in rest_of_text.split('\n') if '이유:' in line][0]
 
             # 숫자만 추출 (예: "신뢰도: 90%" -> 90)
             confidence_score = int(''.join(filter(str.isdigit, score_line)))
@@ -426,6 +433,16 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
                 'reason': confidence_reason
             }
             result_data['gemini_response'] = markdown.markdown(main_response_text.strip())
+
+            # 경고 수준 파싱
+            if '[경고 수준]' in rest_of_text:
+                warning_level_text = rest_of_text.split('[경고 수준]')[1].strip()
+                # "안전 🟢" 같은 형식에서 단어만 추출
+                if "안전" in warning_level_text: result_data['warning_level'] = 'safe'
+                elif "주의" in warning_level_text: result_data['warning_level'] = 'caution'
+                elif "경고" in warning_level_text: result_data['warning_level'] = 'warning'
+                elif "상담" in warning_level_text: result_data['warning_level'] = 'consult'
+
         except (ValueError, IndexError):
             # 파싱 실패 시 전체 텍스트를 그대로 보여줌
             result_data['gemini_response'] = markdown.markdown(raw_text)
