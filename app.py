@@ -469,6 +469,10 @@ def run_analysis_task(form_data, image_path_relative, selected_behaviors):
         return {"error": f"AI 분석 작업 중 오류가 발생했습니다: {e}"}
 
 # --- 4. Flask 라우트(경로) 설정 ---
+@app.route('/ping')
+def ping():
+    return "Pong", 200
+
 @app.route('/')
 def index():
     return render_template('index.html') # 메인 페이지만을 렌더링합니다.
